@@ -57,7 +57,6 @@
   </div>
 
   <h2 class="section-title">Топ стран</h2>
-  <p class="muted small">Страна по IP считается <strong>локально</strong>. Если есть GeoLite2 City (<code class="slug-inline">data/GeoLite2-City.mmdb</code> или <code class="slug-inline">GEOIP_CITY_DB_PATH</code>), используются страна, регион и город (ключ <code class="slug-inline">MAXMIND_LICENSE_KEY</code> или <code class="slug-inline">python scripts/download_geolite.py</code>). Если City нет, при старте подтягивается <strong>DB-IP Country</strong> (~8&nbsp;МиБ, без регистрации) в <code class="slug-inline">data/dbip-country.mmdb</code> — см. <a href="https://db-ip.com">db-ip.com</a> (CC&nbsp;BY&nbsp;4.0, нужна атрибуция). Свой файл: <code class="slug-inline">GEOIP_COUNTRY_DB_PATH</code>; отключить автоскачивание: <code class="slug-inline">GEOIP_COUNTRY_AUTO_DOWNLOAD=false</code>; вручную: <code class="slug-inline">python scripts/download_dbip_country.py</code>. <strong>Локально</strong> при заходе на <code class="slug-inline">localhost</code> / <code class="slug-inline">127.0.0.1</code> базы не возвращают страну — для отладки задайте публичный IP в <code class="slug-inline">GEOIP_DEBUG_FALLBACK_IP</code> (например <code class="slug-inline">8.8.8.8</code>) и сделайте новый клик.</p>
   {% if not countries %}
   <p class="muted">Нет данных за период.</p>
   {% else %}
