@@ -11,6 +11,12 @@
     <div class="row wrap">
       <a class="btn btn-secondary" href="/admin/links/{{ link.id }}/edit">Правка</a>
       <a class="btn btn-secondary" href="/admin">Все ссылки</a>
+      <form method="post" action="/admin/links/{{ link.id }}/delete" class="inline"
+            data-confirm-title="Удалить ссылку?"
+            data-confirm-message="Будут удалены эта короткая ссылка и вся связанная статистика кликов. Восстановить данные будет нельзя."
+            data-confirm-ok="Удалить">
+        <button type="submit" class="btn btn-danger">Удалить</button>
+      </form>
     </div>
   </div>
 
@@ -33,6 +39,16 @@
       <span class="kpi-card__num">{{ uniques }}</span>
       <span class="kpi-card__lbl">уникальных</span>
     </div>
+  </div>
+
+  <div class="stats-clear-panel">
+    <form method="post" action="/admin/links/{{ link.id }}/clicks/clear" class="inline"
+          data-confirm-title="Очистить статистику кликов?"
+          data-confirm-message="Будут удалены все записи кликов по этой ссылке: график, счётчики и топ стран. Сама короткая ссылка и целевой URL останутся. Восстановить записи будет нельзя."
+          data-confirm-ok="Очистить">
+      <button type="submit" class="btn btn-danger">Очистить статистику кликов</button>
+    </form>
+    <p class="muted small stats-clear-hint">Безвозвратно удаляются все сохранённые клики по этой ссылке (IP, гео, cookie‑идентификатор посетителя в рамках записи).</p>
   </div>
 
   <div class="chart-panel">

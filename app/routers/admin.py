@@ -201,6 +201,22 @@ async def link_delete(
     return RedirectResponse("/admin", status_code=302)
 
 
+@router.post("/links/{link_id}/clicks/clear")
+async def clear_link_clicks(
+    request: Request,
+    link_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    """Удалить все записи кликов по ссылке (сама ссылка остаётся)."""
+    _require_admin(request)
+    link = await db.get(Link, link_id)
+    if link is None:
+        raise HTTPException(404)
+    await db.execute(delete(Click).where(Click.link_id == link_id))
+    await db.commit()
+    return RedirectResponse(f"/admin/links/{link.id}/stats", status_code=302)
+
+
 def _parse_range(
     from_s: str | None, to_s: str | None
 ) -> tuple[datetime, datetime]:

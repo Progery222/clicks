@@ -34,7 +34,6 @@
     <nav class="nav" id="main-nav" aria-label="Разделы админки">
       <a class="nav-link" href="/admin">Ссылки</a>
       <a class="nav-link" href="/admin/links/new">Новая</a>
-      <a class="nav-link" href="/privacy">Конфиденциальность</a>
       <a class="nav-link nav-link--muted" href="/admin/logout">Выход</a>
     </nav>
     {% endif %}
@@ -42,6 +41,19 @@
   <main class="main">
     {% block content %}{% endblock %}
   </main>
+
+  <div id="confirm-dialog" class="confirm-dialog" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message">
+    <div class="confirm-dialog__backdrop" data-confirm-dismiss tabindex="-1"></div>
+    <div class="confirm-dialog__panel">
+      <h2 id="confirm-dialog-title" class="confirm-dialog__title"></h2>
+      <p id="confirm-dialog-message" class="confirm-dialog__message muted"></p>
+      <div class="confirm-dialog__actions">
+        <button type="button" class="btn btn-secondary" data-confirm-dismiss>Отмена</button>
+        <button type="button" class="btn btn-danger" id="confirm-dialog-ok">Подтвердить</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function () {
       var b = document.getElementById("nav-back");
@@ -73,6 +85,63 @@
       }
       if (mqWide.addEventListener) mqWide.addEventListener("change", closeNavIfWide);
       else if (mqWide.addListener) mqWide.addListener(closeNavIfWide);
+    })();
+
+    (function () {
+      var dlg = document.getElementById("confirm-dialog");
+      if (!dlg) return;
+      var titleEl = document.getElementById("confirm-dialog-title");
+      var msgEl = document.getElementById("confirm-dialog-message");
+      var okBtn = document.getElementById("confirm-dialog-ok");
+      var pendingForm = null;
+
+      function close() {
+        dlg.classList.remove("is-open");
+        dlg.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+        pendingForm = null;
+      }
+
+      function open(form) {
+        pendingForm = form;
+        titleEl.textContent = form.getAttribute("data-confirm-title") || "Подтвердите";
+        msgEl.textContent = form.getAttribute("data-confirm-message") || "";
+        okBtn.textContent = form.getAttribute("data-confirm-ok") || "Подтвердить";
+        dlg.classList.add("is-open");
+        dlg.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
+        okBtn.focus();
+      }
+
+      okBtn.addEventListener("click", function () {
+        if (!pendingForm) return;
+        var f = pendingForm;
+        close();
+        f.dataset.confirmed = "1";
+        f.requestSubmit();
+      });
+
+      dlg.querySelectorAll("[data-confirm-dismiss]").forEach(function (el) {
+        el.addEventListener("click", close);
+      });
+
+      document.addEventListener("keydown", function (e) {
+        if (e.key !== "Escape" || !dlg.classList.contains("is-open")) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        close();
+      }, true);
+
+      document.querySelectorAll("form[data-confirm-title]").forEach(function (form) {
+        form.addEventListener("submit", function (e) {
+          if (form.dataset.confirmed === "1") {
+            delete form.dataset.confirmed;
+            return;
+          }
+          e.preventDefault();
+          open(form);
+        });
+      });
     })();
   </script>
 </body>

@@ -308,6 +308,94 @@ a:hover {
   margin-top: 2rem;
 }
 
+/* Модальное подтверждение (вместо window.confirm) */
+.confirm-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-top: max(1rem, env(safe-area-inset-top));
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.confirm-dialog.is-open {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.confirm-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 6, 12, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.confirm-dialog__panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 26rem;
+  padding: 1.35rem 1.5rem 1.4rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong);
+  background: linear-gradient(165deg, var(--surface) 0%, var(--surface-2) 100%);
+  box-shadow: var(--shadow-card), 0 0 0 1px rgba(0, 0, 0, 0.4);
+  transform: scale(0.96);
+  opacity: 0;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+
+.confirm-dialog.is-open .confirm-dialog__panel {
+  transform: scale(1);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-dialog,
+  .confirm-dialog__panel {
+    transition: none;
+  }
+
+  .confirm-dialog.is-open .confirm-dialog__panel {
+    transform: none;
+  }
+}
+
+.confirm-dialog__title {
+  margin: 0 0 0.65rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.confirm-dialog__message {
+  margin: 0 0 1.35rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: flex-end;
+}
+
 .empty-state {
   text-align: center;
   padding: 2.5rem 1.25rem;
@@ -332,10 +420,10 @@ a:hover {
   margin-top: 1rem;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
+  /* Не шире родителя — иначе min-width таблицы даёт «пустой» скроллбар */
+  min-width: 0;
+  overflow-x: clip;
+  overflow-y: visible;
   background: rgba(0, 0, 0, 0.2);
 }
 
@@ -346,7 +434,7 @@ a:hover {
 }
 
 .table--wide {
-  min-width: 36rem;
+  min-width: min(36rem, 100%);
 }
 
 .table th,
@@ -503,6 +591,17 @@ form.inline {
   color: var(--text-secondary);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
+}
+
+.btn-danger {
+  color: #fff;
+  background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%);
+  border: 1px solid rgba(251, 113, 133, 0.45);
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.25);
+}
+
+.btn-danger:hover {
+  filter: brightness(1.08);
 }
 
 .btn-block {
@@ -662,6 +761,19 @@ button[type="submit"].btn-primary {
   background: rgba(0, 0, 0, 0.25);
 }
 
+.stats-clear-panel {
+  margin: 0.5rem 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius);
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  background: rgba(251, 113, 133, 0.06);
+}
+
+.stats-clear-hint {
+  margin: 0.65rem 0 0;
+  max-width: 52ch;
+}
+
 .stats-head {
   margin-bottom: 0.25rem;
 }
@@ -811,6 +923,11 @@ button[type="submit"].btn-primary {
     min-height: 2.75rem;
   }
 
+  .stats-head .row.wrap form.inline {
+    display: block;
+    width: 100%;
+  }
+
   .filter-bar.row.wrap.gap {
     flex-direction: column;
     align-items: stretch;
@@ -828,6 +945,11 @@ button[type="submit"].btn-primary {
   }
 
   .filter-bar .btn {
+    width: 100%;
+    min-height: 2.75rem;
+  }
+
+  .stats-clear-panel .btn {
     width: 100%;
     min-height: 2.75rem;
   }
@@ -871,7 +993,7 @@ button[type="submit"].btn-primary {
   }
 
   .table--wide {
-    min-width: 32rem;
+    min-width: min(32rem, 100%);
   }
 
   .actions {
@@ -891,6 +1013,16 @@ button[type="submit"].btn-primary {
   .btn {
     min-height: 2.75rem;
   }
+
+  .confirm-dialog__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .confirm-dialog__actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 380px) {
@@ -899,6 +1031,6 @@ button[type="submit"].btn-primary {
   }
 
   .table--wide {
-    min-width: 28rem;
+    min-width: min(28rem, 100%);
   }
 }

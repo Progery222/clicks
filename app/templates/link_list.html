@@ -34,7 +34,9 @@
             <a class="link-action" href="/admin/links/{{ row.link.id }}/stats">Статистика</a>
             <a class="link-action" href="/admin/links/{{ row.link.id }}/edit">Правка</a>
             <form method="post" action="/admin/links/{{ row.link.id }}/delete" class="inline"
-                  onsubmit="return confirm('Удалить ссылку и всю статистику?');">
+                  data-confirm-title="Удалить ссылку?"
+                  data-confirm-message="Будут удалены эта короткая ссылка и вся связанная статистика кликов. Восстановить данные будет нельзя."
+                  data-confirm-ok="Удалить">
               <button type="submit" class="link-action link-action--danger">Удалить</button>
             </form>
           </td>
