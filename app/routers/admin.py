@@ -97,6 +97,19 @@ async def dashboard(
     )
 
 
+@router.get("/api/link-counts")
+async def api_link_counts(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
+    """Актуальные «всего» и «сегодня» (UTC) по ссылкам для обновления без перезагрузки."""
+    _require_admin(request)
+    try:
+        counts = await dashboard_click_counts(db)
+    except Exception:
+        log.exception("api_link_counts: dashboard_click_counts failed")
+        counts = {}
+    payload = {str(lid): {"total": t, "today": d} for lid, (t, d) in counts.items()}
+    return JSONResponse({"counts": payload})
+
+
 def _valid_url(url: str) -> bool:
     u = url.strip()
     return u.startswith("http://") or u.startswith("https://")
@@ -270,6 +283,39 @@ def _parse_range(
     if start >= end:
         start = end - timedelta(days=1)
     return start, end
+
+
+@router.get("/links/{link_id}/stats/data")
+async def link_stats_data(
+    request: Request,
+    link_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    date_from: str | None = Query(None, alias="from"),
+    date_to: str | None = Query(None, alias="to"),
+) -> JSONResponse:
+    """JSON для страницы статистики: обновление KPI, графика и топа стран без перезагрузки."""
+    _require_admin(request)
+    link = await db.get(Link, link_id)
+    if link is None:
+        raise HTTPException(404)
+    start, end = _parse_range(date_from, date_to)
+    total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
+    by_day = await stats_by_day(session=db, link_id=link.id, start=start, end=end)
+    countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
+    geoip_db_present = (
+        resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
+    )
+    countries_missing_code = any((not cc) for cc, _ in countries)
+    return JSONResponse(
+        {
+            "total": total,
+            "uniques": uniq,
+            "by_day": by_day,
+            "countries": [{"code": c or "", "count": n} for c, n in countries],
+            "countries_missing_code": countries_missing_code,
+            "geoip_db_present": geoip_db_present,
+        }
+    )
 
 
 @router.get("/links/{link_id}/stats", response_class=HTMLResponse)

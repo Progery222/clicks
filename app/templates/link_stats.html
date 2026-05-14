@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ link.slug }} — статистика{% endblock %}
 {% block content %}
-<section class="card">
+<section class="card" data-stats-link-id="{{ link.id }}">
   <div class="row between wrap stats-head">
     <div>
       <h1 class="page-title">{{ link.label or link.slug }}</h1>
@@ -32,11 +32,11 @@
 
   <div class="kpi-grid">
     <div class="kpi-card">
-      <span class="kpi-card__num">{{ total }}</span>
+      <span class="kpi-card__num" id="stat-live-total">{{ total }}</span>
       <span class="kpi-card__lbl">кликов</span>
     </div>
     <div class="kpi-card kpi-card--accent">
-      <span class="kpi-card__num">{{ uniques }}</span>
+      <span class="kpi-card__num" id="stat-live-uniques">{{ uniques }}</span>
       <span class="kpi-card__lbl">уникальных</span>
     </div>
   </div>
@@ -57,6 +57,7 @@
   </div>
 
   <h2 class="section-title">Топ стран</h2>
+  <div id="countries-live-root">
   {% if not countries %}
   <p class="muted">Нет данных за период.</p>
   {% else %}
@@ -80,6 +81,7 @@
     </table>
   </div>
   {% endif %}
+  </div>
 
   <h2 class="section-title">Экспорт CSV</h2>
   <p class="muted">UTF‑8 с BOM для Excel.</p>
@@ -90,35 +92,37 @@
 </section>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  const el = document.getElementById('chart');
-  const raw = document.getElementById('chart-data');
+document.addEventListener("DOMContentLoaded", function () {
+  var section = document.querySelector("section.card[data-stats-link-id]");
+  var el = document.getElementById("chart");
+  var raw = document.getElementById("chart-data");
   if (!el || !raw || !window.Chart) return;
-  const days = JSON.parse(raw.textContent || '[]');
-  const labels = days.map(d => d.day);
-  const clicks = days.map(d => d.clicks);
-  const uniques = days.map(d => d.uniques);
-  const tick = '#94a3b8';
-  const grid = 'rgba(148, 163, 184, 0.12)';
-  const narrow = window.matchMedia('(max-width: 768px)').matches;
-  const narrowFont = narrow ? 10 : 12;
-  new Chart(el, {
-    type: 'bar',
+
+  var days = JSON.parse(raw.textContent || "[]");
+  var labels = days.map(function (d) { return d.day; });
+  var clicks = days.map(function (d) { return d.clicks; });
+  var uniques = days.map(function (d) { return d.uniques; });
+  var tick = "#94a3b8";
+  var grid = "rgba(148, 163, 184, 0.12)";
+  var narrow = window.matchMedia("(max-width: 768px)").matches;
+  var narrowFont = narrow ? 10 : 12;
+  var statsChart = new Chart(el, {
+    type: "bar",
     data: {
-      labels,
+      labels: labels,
       datasets: [
-        { label: 'Клики', data: clicks, backgroundColor: 'rgba(99, 102, 241, 0.75)', borderRadius: 6 },
-        { label: 'Уникальные', data: uniques, backgroundColor: 'rgba(45, 212, 191, 0.7)', borderRadius: 6 },
+        { label: "Клики", data: clicks, backgroundColor: "rgba(99, 102, 241, 0.75)", borderRadius: 6 },
+        { label: "Уникальные", data: uniques, backgroundColor: "rgba(45, 212, 191, 0.7)", borderRadius: 6 },
       ],
     },
     options: {
       responsive: true,
       plugins: {
         legend: {
-          position: narrow ? 'bottom' : 'top',
+          position: narrow ? "bottom" : "top",
           labels: {
             color: tick,
-            font: { family: 'DM Sans', size: narrowFont },
+            font: { family: "DM Sans", size: narrowFont },
             boxWidth: narrow ? 10 : 12,
             padding: narrow ? 8 : 12,
           },
@@ -128,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         x: {
           ticks: {
             color: tick,
-            font: { family: 'DM Sans', size: narrowFont },
+            font: { family: "DM Sans", size: narrowFont },
             maxRotation: narrow ? 60 : 0,
             autoSkip: true,
             maxTicksLimit: narrow ? 8 : 24,
@@ -137,12 +141,93 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         y: {
           beginAtZero: true,
-          ticks: { color: tick, font: { family: 'DM Sans', size: narrowFont } },
+          ticks: { color: tick, font: { family: "DM Sans", size: narrowFont } },
           grid: { color: grid },
         },
       },
     },
   });
+
+  if (!section) return;
+  var linkId = section.getAttribute("data-stats-link-id");
+  if (!linkId) return;
+
+  var elTotal = document.getElementById("stat-live-total");
+  var elUniq = document.getElementById("stat-live-uniques");
+  var countriesRoot = document.getElementById("countries-live-root");
+  var filterForm = document.querySelector(".filter-bar");
+
+  function esc(s) {
+    var d = document.createElement("div");
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function renderCountries(data) {
+    if (!countriesRoot) return;
+    var html = "";
+    if (data.countries_missing_code) {
+      html += "<p class=\"muted small\">";
+      if (!data.geoip_db_present) {
+        html += "<strong>Сейчас на сервере не найден файл GeoIP</strong> (ни <code class=\"slug-inline\">GeoLite2-City.mmdb</code>, ни <code class=\"slug-inline\">dbip-country.mmdb</code>) — проверьте логи при старте, сеть и переменные <code class=\"slug-inline\">GEOIP_*</code>.";
+      } else {
+        html += "«—» в столбце страны значит, что <strong>в момент записи клика</strong> в базу не попал код страны (часто: база ещё не была на сервере, IP приватный, заход с <code class=\"slug-inline\">localhost</code> без <code class=\"slug-inline\">GEOIP_DEBUG_FALLBACK_IP</code>). Это не пересчитывается задним числом — сделайте новый тестовый переход по ссылке после появления MMDB на сервере.";
+      }
+      html += "</p>";
+    }
+    if (!data.countries || !data.countries.length) {
+      html += "<p class=\"muted\">Нет данных за период.</p>";
+    } else {
+      html += "<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Страна</th><th class=\"num\">Кликов</th></tr></thead><tbody>";
+      data.countries.forEach(function (row) {
+        var cc = row.code ? row.code : "—";
+        html += "<tr><td>" + esc(cc) + "</td><td class=\"num\">" + esc(String(row.count)) + "</td></tr>";
+      });
+      html += "</tbody></table></div>";
+    }
+    countriesRoot.innerHTML = html;
+  }
+
+  function readRange() {
+    var from = "";
+    var to = "";
+    if (filterForm) {
+      var fi = filterForm.querySelector("input[name=from]");
+      var ti = filterForm.querySelector("input[name=to]");
+      if (fi) from = fi.value || "";
+      if (ti) to = ti.value || "";
+    }
+    return { from: from, to: to };
+  }
+
+  var POLL_MS = 12000;
+  function pollStats() {
+    if (document.hidden) return;
+    var r = readRange();
+    var q = new URLSearchParams();
+    if (r.from) q.set("from", r.from);
+    if (r.to) q.set("to", r.to);
+    var qs = q.toString();
+    var url = "/admin/links/" + encodeURIComponent(linkId) + "/stats/data" + (qs ? "?" + qs : "");
+    fetch(url, { credentials: "same-origin" })
+      .then(function (res) {
+        if (!res.ok) throw new Error("bad status");
+        return res.json();
+      })
+      .then(function (data) {
+        if (elTotal) elTotal.textContent = String(data.total);
+        if (elUniq) elUniq.textContent = String(data.uniques);
+        var bd = data.by_day || [];
+        statsChart.data.labels = bd.map(function (d) { return d.day; });
+        statsChart.data.datasets[0].data = bd.map(function (d) { return d.clicks; });
+        statsChart.data.datasets[1].data = bd.map(function (d) { return d.uniques; });
+        statsChart.update("none");
+        renderCountries(data);
+      })
+      .catch(function () {});
+  }
+
+  window.setInterval(pollStats, POLL_MS);
 });
 </script>
 {% endblock %}
