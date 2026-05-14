@@ -7,7 +7,7 @@
       <h1 class="page-title">Короткие ссылки</h1>
       <p class="muted small">«Всего» — за всё время. «Сегодня» и графики по дням — календарные сутки <strong>UTC</strong>.</p>
     </div>
-    <a class="btn btn-primary" href="/admin/links/new">+ Создать ссылку</a>
+    <button type="button" class="btn btn-primary js-open-new-link-modal">+ Создать ссылку</button>
   </div>
   {% if link_rows is defined and link_rows %}
   <div class="table-wrap table-wrap--flush">
@@ -52,12 +52,37 @@
   <div class="empty-state">
     <p class="empty-state__title">Пока нет ссылок</p>
     <p class="muted">Создайте первую короткую ссылку для TikTok, Instagram и т.д.</p>
-    <a class="btn btn-primary" href="/admin/links/new">Создать ссылку</a>
+    <button type="button" class="btn btn-primary js-open-new-link-modal">Создать ссылку</button>
   </div>
   {% endif %}
 </section>
+
+<div id="new-link-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="new-link-modal-title">
+  <div class="new-link-modal__backdrop" data-new-link-dismiss tabindex="-1"></div>
+  <div class="new-link-modal__panel">
+    <div class="new-link-modal__head">
+      <h2 id="new-link-modal-title" class="new-link-modal__title">Новая ссылка</h2>
+      <button type="button" class="new-link-modal__close" data-new-link-dismiss aria-label="Закрыть">×</button>
+    </div>
+    <p id="new-link-modal-error" class="new-link-modal__error error error--box" hidden></p>
+    <form id="new-link-form" method="post" action="/admin/links/new" class="stack">
+      <label class="field-label">Целевой URL
+        <input class="input" type="url" name="destination_url" required autocomplete="url"
+          placeholder="https://rumble.com/c/...">
+      </label>
+      <label class="field-label">Метка (для себя)
+        <input class="input" type="text" name="label" maxlength="255" autocomplete="off"
+          placeholder="TikTok @user">
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
+    </form>
+  </div>
+</div>
+
 <script>
 (function () {
+  var autoOpen = {{ open_new_link_modal | default(false) | tojson }};
+
   function isActionTarget(el) {
     return el && el.closest && el.closest("a.icon-btn, button.icon-btn, form.icon-btn-form");
   }
@@ -80,6 +105,72 @@
       if (url) window.location.href = url;
     });
   });
+
+  var modal = document.getElementById("new-link-modal");
+  var form = document.getElementById("new-link-form");
+  var errEl = document.getElementById("new-link-modal-error");
+  if (!modal || !form) return;
+
+  function setOpen(open) {
+    modal.classList.toggle("is-open", open);
+    modal.setAttribute("aria-hidden", open ? "false" : "true");
+    document.body.style.overflow = open ? "hidden" : "";
+    if (!open) {
+      form.reset();
+      errEl.textContent = "";
+      errEl.hidden = true;
+    } else {
+      var first = form.querySelector("input[name=destination_url]");
+      if (first) window.setTimeout(function () { first.focus(); }, 50);
+    }
+  }
+
+  document.querySelectorAll(".js-open-new-link-modal").forEach(function (btn) {
+    btn.addEventListener("click", function () { setOpen(true); });
+  });
+  modal.querySelectorAll("[data-new-link-dismiss]").forEach(function (el) {
+    el.addEventListener("click", function () { setOpen(false); });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || !modal.classList.contains("is-open")) return;
+    e.preventDefault();
+    setOpen(false);
+  }, true);
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    errEl.hidden = true;
+    errEl.textContent = "";
+    var fd = new FormData(form);
+    fetch(form.action, {
+      method: "POST",
+      body: fd,
+      headers: { "X-Modal-Form": "1", "Accept": "application/json" },
+      credentials: "same-origin",
+    })
+      .then(function (res) { return res.json().then(function (data) { return { res: res, data: data }; }); })
+      .then(function (_ref) {
+        var res = _ref.res;
+        var data = _ref.data;
+        if (res.ok && data.redirect) {
+          window.location.href = data.redirect;
+          return;
+        }
+        errEl.textContent = (data && data.error) ? data.error : "Не удалось сохранить.";
+        errEl.hidden = false;
+      })
+      .catch(function () {
+        errEl.textContent = "Ошибка сети. Попробуйте ещё раз.";
+        errEl.hidden = false;
+      });
+  });
+
+  if (autoOpen) {
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    setOpen(true);
+  }
 })();
 </script>
 {% endblock %}

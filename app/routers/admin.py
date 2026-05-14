@@ -9,7 +9,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
@@ -73,7 +73,11 @@ async def logout(request: Request) -> RedirectResponse:
 
 
 @router.get("", response_class=HTMLResponse)
-async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
+async def dashboard(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    new: str | None = Query(None),
+):
     _require_admin(request)
     res = await db.execute(select(Link).order_by(Link.created_at.desc()))
     links = list(res.scalars().all())
@@ -88,6 +92,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)):
         {
             "request": request,
             "link_rows": link_rows,
+            "open_new_link_modal": new == "1",
         },
     )
 
@@ -106,16 +111,14 @@ async def _unique_slug(db: AsyncSession) -> str:
     raise RuntimeError("Could not allocate slug")
 
 
-@router.get("/links/new", response_class=HTMLResponse)
-async def link_new_get(request: Request):
+@router.get("/links/new")
+async def link_new_get(request: Request) -> RedirectResponse:
+    """Создание ссылки — только модальное окно на /admin (редирект для старых закладок)."""
     _require_admin(request)
-    return templates.TemplateResponse(
-        "link_form.html",
-        {"request": request, "link": None, "error": None, "title": "Новая ссылка"},
-    )
+    return RedirectResponse("/admin?new=1", status_code=302)
 
 
-@router.post("/links/new", response_class=HTMLResponse)
+@router.post("/links/new")
 async def link_new_post(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -123,13 +126,18 @@ async def link_new_post(
     label: str | None = Form(None),
 ):
     _require_admin(request)
+    modal = (request.headers.get("x-modal-form") or "").strip() == "1"
+
     if not _valid_url(destination_url):
+        msg = "URL должен начинаться с http:// или https://"
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
         return templates.TemplateResponse(
             "link_form.html",
             {
                 "request": request,
                 "link": None,
-                "error": "URL должен начинаться с http:// или https://",
+                "error": msg,
                 "title": "Новая ссылка",
             },
             status_code=400,
@@ -138,7 +146,10 @@ async def link_new_post(
     link = Link(slug=slug, destination_url=destination_url.strip(), label=(label or "").strip() or None)
     db.add(link)
     await db.commit()
-    return RedirectResponse(f"/admin/links/{link.id}/stats", status_code=302)
+    dest = f"/admin/links/{link.id}/stats"
+    if modal:
+        return JSONResponse({"redirect": dest})
+    return RedirectResponse(dest, status_code=302)
 
 
 @router.get("/links/{link_id}/edit", response_class=HTMLResponse)
