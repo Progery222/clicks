@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Bio links{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="top">
+    <div class="top-left">
+      <button type="button" class="btn-back" id="nav-back" title="Предыдущая страница">← Назад</button>
+      <a class="brand" href="/admin">Bio links</a>
+    </div>
+    <nav class="nav">
+      {% if request.session.get('admin') %}
+      <a href="/admin">Ссылки</a>
+      <a href="/admin/links/new">Новая</a>
+      <a href="/privacy">Конфиденциальность</a>
+      <a href="/admin/logout">Выход</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    (function () {
+      var b = document.getElementById("nav-back");
+      if (!b) return;
+      b.addEventListener("click", function () {
+        if (window.history.length > 1) window.history.back();
+        else window.location.href = "/admin";
+      });
+    })();
+  </script>
+</body>
+</html>

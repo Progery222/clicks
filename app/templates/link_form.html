@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — Bio links{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>{{ title }}</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" class="stack">
+    <label>Целевой URL
+      <input type="url" name="destination_url" required
+        value="{{ link.destination_url if link else '' }}"
+        placeholder="https://rumble.com/...">
+    </label>
+    <label>Метка (для себя)
+      <input type="text" name="label" maxlength="255"
+        value="{{ link.label if link and link.label else '' }}"
+        placeholder="TikTok @user">
+    </label>
+    {% if link %}
+    <p class="muted">Slug не меняется: <code>{{ link.slug }}</code></p>
+    {% endif %}
+    <button type="submit">Сохранить</button>
+  </form>
+</section>
+{% endblock %}

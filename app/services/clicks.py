@@ -1,0 +1,78 @@
+import asyncio
+import logging
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Click
+from app.services.dedupe import dedupe_key_for_visitor, fingerprint_fallback
+from app.services.geoip import lookup_ip
+
+log = logging.getLogger(__name__)
+
+
+async def insert_click(
+    session: AsyncSession,
+    *,
+    link_id: uuid.UUID,
+    ip: str | None,
+    user_agent: str | None,
+    referer: str | None,
+    visitor_uuid: uuid.UUID | None,
+    use_fingerprint: bool,
+) -> None:
+    """Persist one click row. Geo lookup runs in a thread (blocking MMDB)."""
+    if use_fingerprint:
+        day = datetime.now(UTC).date()
+        dedupe = fingerprint_fallback(ip, user_agent, day)
+        vid = None
+    else:
+        if visitor_uuid is None:
+            day = datetime.now(UTC).date()
+            dedupe = fingerprint_fallback(ip, user_agent, day)
+            vid = None
+        else:
+            dedupe = dedupe_key_for_visitor(visitor_uuid)
+            vid = visitor_uuid
+
+    geo = await asyncio.to_thread(lookup_ip, ip)
+    row = Click(
+        link_id=link_id,
+        ip=ip,
+        user_agent=user_agent,
+        referer=referer,
+        country_code=geo.country_code,
+        region=geo.region,
+        city=geo.city,
+        visitor_id=vid,
+        dedupe_key=dedupe,
+    )
+    session.add(row)
+    await session.commit()
+
+
+async def log_click_background(
+    *,
+    link_id: uuid.UUID,
+    ip: str | None,
+    user_agent: str | None,
+    referer: str | None,
+    visitor_uuid: uuid.UUID | None,
+    use_fingerprint: bool,
+) -> None:
+    from app.database import AsyncSessionLocal
+
+    try:
+        async with AsyncSessionLocal() as session:
+            await insert_click(
+                session,
+                link_id=link_id,
+                ip=ip,
+                user_agent=user_agent,
+                referer=referer,
+                visitor_uuid=visitor_uuid,
+                use_fingerprint=use_fingerprint,
+            )
+    except Exception:
+        log.exception("Failed to record click for link_id=%s", link_id)

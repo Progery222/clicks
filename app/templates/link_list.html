@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Ссылки — Bio links{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row between">
+    <h1>Короткие ссылки</h1>
+    <a class="btn" href="/admin/links/new">Создать</a>
+  </div>
+  <p class="muted small">«Всего» — за всё время. «Сегодня» и графики по дням — календарные сутки <strong>UTC</strong> (как в БД после правки).</p>
+  {% if not link_rows %}
+  <p>Пока нет ссылок.</p>
+  {% else %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Slug</th>
+        <th>Метка</th>
+        <th>Цель</th>
+        <th class="num">Всего</th>
+        <th class="num">Сегодня</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in link_rows %}
+      <tr>
+        <td><code>{{ row.link.slug }}</code></td>
+        <td>{{ row.link.label or "—" }}</td>
+        <td class="truncate" title="{{ row.link.destination_url }}">{{ row.link.destination_url }}</td>
+        <td class="num">{{ row.total }}</td>
+        <td class="num">{{ row.today }}</td>
+        <td class="actions">
+          <a href="/admin/links/{{ row.link.id }}/stats">Статистика</a>
+          <a href="/admin/links/{{ row.link.id }}/edit">Правка</a>
+          <form method="post" action="/admin/links/{{ row.link.id }}/delete" class="inline"
+                onsubmit="return confirm('Удалить ссылку и всю статистику?');">
+            <button type="submit" class="link danger">Удалить</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}
