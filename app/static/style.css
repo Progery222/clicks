@@ -320,16 +320,7 @@ a:hover {
   border: none;
   background: transparent;
   border-radius: 0;
-  overflow-x: visible;
-}
-
-.table--wide .actions {
-  width: 1%;
-  vertical-align: middle;
-}
-
-.table--wide th:last-child {
-  width: 1%;
+  overflow-x: clip;
 }
 
 .card--prose .page-title {
@@ -588,7 +579,53 @@ a:hover {
 }
 
 .table--wide {
+  table-layout: fixed;
+  width: 100%;
   min-width: min(36rem, 100%);
+}
+
+/* Колонки: цель сжимается, числа и действия не наезжают на соседей */
+.table--wide th:nth-child(1),
+.table--wide td:nth-child(1) {
+  width: 11%;
+  min-width: 4.5rem;
+}
+
+.table--wide th:nth-child(2),
+.table--wide td:nth-child(2) {
+  width: 13%;
+  min-width: 4rem;
+}
+
+.table--wide th:nth-child(3),
+.table--wide td:nth-child(3) {
+  min-width: 0;
+}
+
+.table--wide th:nth-child(4),
+.table--wide td:nth-child(4),
+.table--wide th:nth-child(5),
+.table--wide td:nth-child(5) {
+  width: 5.25rem;
+  min-width: 5.25rem;
+  max-width: 5.25rem;
+  overflow: hidden;
+}
+
+.table--wide .actions-head,
+.table--wide td.actions {
+  width: 5.75rem;
+  min-width: 5.75rem;
+  max-width: 5.75rem;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.table--wide td.truncate {
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table th,
@@ -732,7 +769,7 @@ a:hover {
 }
 
 .icon-btn:active {
-  transform: scale(0.96);
+  opacity: 0.92;
 }
 
 .icon-btn:focus-visible {
@@ -1242,10 +1279,6 @@ button[type="submit"].btn-primary {
 
   .table--wide {
     min-width: min(32rem, 100%);
-  }
-
-  .table-wrap--flush {
-    overflow-x: clip;
   }
 
   .actions.actions--icons {
