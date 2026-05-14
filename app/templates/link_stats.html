@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ link.slug }} — статистика{% endblock %}
 {% block content %}
-<section class="card" data-stats-link-id="{{ link.id }}">
+<section class="card" data-stats-link-id="{{ link.id }}" data-active-preset="{{ active_preset }}">
   <div class="row between wrap stats-head">
     <div>
       <h1 class="page-title">{{ link.label or link.slug }}</h1>
@@ -20,6 +20,16 @@
     </div>
   </div>
 
+  <div class="stats-toolbar">
+    <button type="button" class="stats-preset-cycle" id="stats-preset-cycle" data-link-id="{{ link.id }}" data-preset="{{ active_preset }}">
+      {% if active_preset == 'custom' %}Свой период{% elif active_preset == 'week' %}Неделя{% elif active_preset == 'all' %}Всё время{% else %}Сегодня{% endif %}
+    </button>
+    <button type="button" class="btn btn-secondary" id="stats-toggle-dates" aria-controls="stats-date-panel"
+            aria-expanded="{% if active_preset == 'custom' %}true{% else %}false{% endif %}">
+      {% if active_preset == 'custom' %}Свернуть{% else %}Настроить период{% endif %}
+    </button>
+  </div>
+  <div id="stats-date-panel" class="stats-date-panel{% if active_preset != 'custom' %} stats-date-panel--collapsed{% endif %}">
   <form method="get" class="row wrap gap filter-bar">
     <label class="field-label field-label--inline">С
       <input class="input input--date" type="date" name="from" value="{{ period_from }}">
@@ -29,6 +39,7 @@
     </label>
     <button type="submit" class="btn btn-primary">Показать</button>
   </form>
+  </div>
 
   <div class="kpi-grid">
     <div class="kpi-card">
@@ -90,6 +101,25 @@ document.addEventListener("DOMContentLoaded", function () {
   var elUniq = document.getElementById("stat-live-uniques");
   var countriesRoot = document.getElementById("countries-live-root");
   var filterForm = document.querySelector(".filter-bar");
+  var presetBtn = document.getElementById("stats-preset-cycle");
+  var dateToggle = document.getElementById("stats-toggle-dates");
+  var datePanel = document.getElementById("stats-date-panel");
+
+  function readRange() {
+    var preset = (section.getAttribute("data-active-preset") || "today").toLowerCase();
+    if (preset !== "custom") {
+      return { preset: preset };
+    }
+    var from = "";
+    var to = "";
+    if (filterForm) {
+      var fi = filterForm.querySelector("input[name=from]");
+      var ti = filterForm.querySelector("input[name=to]");
+      if (fi) from = fi.value || "";
+      if (ti) to = ti.value || "";
+    }
+    return { preset: "custom", from: from, to: to };
+  }
 
   function esc(s) {
     var d = document.createElement("div");
@@ -122,25 +152,17 @@ document.addEventListener("DOMContentLoaded", function () {
     countriesRoot.innerHTML = html;
   }
 
-  function readRange() {
-    var from = "";
-    var to = "";
-    if (filterForm) {
-      var fi = filterForm.querySelector("input[name=from]");
-      var ti = filterForm.querySelector("input[name=to]");
-      if (fi) from = fi.value || "";
-      if (ti) to = ti.value || "";
-    }
-    return { from: from, to: to };
-  }
-
   var POLL_MS = 12000;
   function pollStats() {
     if (document.hidden) return;
     var r = readRange();
     var q = new URLSearchParams();
-    if (r.from) q.set("from", r.from);
-    if (r.to) q.set("to", r.to);
+    if (r.preset && r.preset !== "custom") {
+      q.set("preset", r.preset);
+    } else {
+      if (r.from) q.set("from", r.from);
+      if (r.to) q.set("to", r.to);
+    }
     var qs = q.toString();
     var url = "/admin/links/" + encodeURIComponent(linkId) + "/stats/data" + (qs ? "?" + qs : "");
     fetch(url, { credentials: "same-origin" })
@@ -154,6 +176,32 @@ document.addEventListener("DOMContentLoaded", function () {
         renderCountries(data);
       })
       .catch(function () {});
+  }
+
+  if (presetBtn && presetBtn.dataset.linkId) {
+    presetBtn.addEventListener("click", function () {
+      var order = ["today", "week", "all"];
+      var cur = (presetBtn.dataset.preset || "today").toLowerCase();
+      if (cur === "custom") cur = "today";
+      var ix = order.indexOf(cur);
+      if (ix < 0) ix = 0;
+      var next = order[(ix + 1) % order.length];
+      window.location.href =
+        "/admin/links/" + encodeURIComponent(presetBtn.dataset.linkId) + "/stats?preset=" + encodeURIComponent(next);
+    });
+  }
+
+  if (dateToggle && datePanel) {
+    function syncDatePanelUi() {
+      var collapsed = datePanel.classList.contains("stats-date-panel--collapsed");
+      dateToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      dateToggle.textContent = collapsed ? "Настроить период" : "Свернуть";
+    }
+    dateToggle.addEventListener("click", function () {
+      datePanel.classList.toggle("stats-date-panel--collapsed");
+      syncDatePanelUi();
+    });
+    syncDatePanelUi();
   }
 
   window.setInterval(pollStats, POLL_MS);

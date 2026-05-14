@@ -284,6 +284,69 @@ def _parse_range(
     return start, end
 
 
+def _active_preset(
+    date_from: str | None, date_to: str | None, preset: str | None
+) -> str:
+    if (date_from and date_from.strip()) or (date_to and date_to.strip()):
+        return "custom"
+    p = (preset or "").strip().lower()
+    if p in ("week", "all"):
+        return p
+    return "today"
+
+
+def _stats_range(
+    link: Link,
+    date_from: str | None,
+    date_to: str | None,
+    preset: str | None,
+) -> tuple[datetime, datetime]:
+    """Период: свой диапазон (from/to) или пресет today / week / all (UTC-календарь)."""
+    from datetime import date as date_cls
+    from datetime import time as time_cls
+
+    tz = ZoneInfo("UTC")
+    now = datetime.now(tz)
+    today: date_cls = now.date()
+
+    custom = (date_from and date_from.strip()) or (date_to and date_to.strip())
+    if custom:
+        return _parse_range(date_from, date_to)
+
+    def day_start(d: date_cls) -> datetime:
+        return datetime.combine(d, time_cls.min, tzinfo=tz)
+
+    p = (preset or "").strip().lower()
+    if p == "week":
+        start_d = today - timedelta(days=6)
+        return day_start(start_d), day_start(today + timedelta(days=1))
+    if p == "all":
+        lc = link.created_at
+        if lc.tzinfo is None:
+            lc = lc.replace(tzinfo=tz)
+        else:
+            lc = lc.astimezone(tz)
+        start = day_start(lc.date())
+        end = day_start(today + timedelta(days=1))
+        if start >= end:
+            start = day_start(today)
+        return start, end
+    return day_start(today), day_start(today + timedelta(days=1))
+
+
+def _form_period_dates(start: datetime, end: datetime) -> tuple[str, str]:
+    """Даты для полей type=date: последний день включительно при end = 00:00 следующего дня."""
+    pf = start.date().isoformat()
+    if end.hour == 0 and end.minute == 0 and end.second == 0 and end.microsecond == 0:
+        last = end.date() - timedelta(days=1)
+    else:
+        last = end.date()
+    pt = last.isoformat()
+    if pf > pt:
+        pt = pf
+    return pf, pt
+
+
 @router.get("/links/{link_id}/stats/data")
 async def link_stats_data(
     request: Request,
@@ -291,13 +354,14 @@ async def link_stats_data(
     db: AsyncSession = Depends(get_db),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
+    preset: str | None = Query(None),
 ) -> JSONResponse:
     """JSON для страницы статистики: обновление KPI и топа стран без перезагрузки."""
     _require_admin(request)
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
-    start, end = _parse_range(date_from, date_to)
+    start, end = _stats_range(link, date_from, date_to, preset)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
     geoip_db_present = (
@@ -322,12 +386,15 @@ async def link_stats(
     db: AsyncSession = Depends(get_db),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
+    preset: str | None = Query(None),
 ):
     _require_admin(request)
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
-    start, end = _parse_range(date_from, date_to)
+    start, end = _stats_range(link, date_from, date_to, preset)
+    active_preset = _active_preset(date_from, date_to, preset)
+    period_from, period_to = _form_period_dates(start, end)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
 
@@ -345,8 +412,9 @@ async def link_stats(
             "total": total,
             "uniques": uniq,
             "countries": countries,
-            "period_from": date_from if date_from else start.date().isoformat(),
-            "period_to": date_to if date_to else end.date().isoformat(),
+            "period_from": period_from,
+            "period_to": period_to,
+            "active_preset": active_preset,
             "short_url": short_url,
             "geoip_db_present": geoip_db_present,
             "countries_missing_code": countries_missing_code,

@@ -1002,6 +1002,47 @@ button[type="submit"].btn-primary {
   margin-bottom: 0.25rem;
 }
 
+.stats-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin: 1rem 0 0.75rem;
+}
+
+.stats-preset-cycle {
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  padding: 0.35rem 0;
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.45);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.stats-preset-cycle:hover {
+  color: var(--accent);
+  border-bottom-color: rgba(129, 140, 248, 0.55);
+}
+
+.stats-preset-cycle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.stats-date-panel--collapsed {
+  display: none;
+}
+
+.stats-date-panel .filter-bar {
+  margin-top: 0;
+}
+
 .stats-meta {
   margin: 0.25rem 0 0;
   font-size: 0.9rem;
