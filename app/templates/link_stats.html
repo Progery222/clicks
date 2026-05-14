@@ -78,12 +78,6 @@
   {% endif %}
   </div>
 
-  <h2 class="section-title">Экспорт CSV</h2>
-  <p class="muted">UTF‑8 с BOM для Excel.</p>
-  <div class="row wrap gap export-actions">
-    <a class="btn btn-secondary" href="/admin/export/clicks.csv?link_id={{ link.id }}&from={{ period_from }}&to={{ period_to }}">Сырые клики</a>
-    <a class="btn btn-secondary" href="/admin/export/summary.csv?link_id={{ link.id }}&from={{ period_from }}&to={{ period_to }}">Сводка по дням</a>
-  </div>
 </section>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
