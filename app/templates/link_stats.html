@@ -2,52 +2,75 @@
 {% block title %}{{ link.slug }} — статистика{% endblock %}
 {% block content %}
 <section class="card">
-  <div class="row between wrap">
+  <div class="row between wrap stats-head">
     <div>
-      <h1>{{ link.label or link.slug }}</h1>
-      <p class="muted">Короткая ссылка: <a href="{{ short_url }}">{{ short_url }}</a></p>
-      <p class="muted">Цель: <a href="{{ link.destination_url }}">{{ link.destination_url }}</a></p>
+      <h1 class="page-title">{{ link.label or link.slug }}</h1>
+      <p class="muted stats-meta">Короткая ссылка: <a class="link-inline" href="{{ short_url }}">{{ short_url }}</a></p>
+      <p class="muted stats-meta">Цель: <a class="link-inline" href="{{ link.destination_url }}">{{ link.destination_url }}</a></p>
     </div>
-    <div class="row">
-      <a class="btn secondary" href="/admin/links/{{ link.id }}/edit">Правка</a>
-      <a class="btn secondary" href="/admin">Все ссылки</a>
+    <div class="row wrap">
+      <a class="btn btn-secondary" href="/admin/links/{{ link.id }}/edit">Правка</a>
+      <a class="btn btn-secondary" href="/admin">Все ссылки</a>
     </div>
   </div>
 
-  <form method="get" class="row wrap gap filter">
-    <label>С <input type="date" name="from" value="{{ period_from }}"></label>
-    <label>По <input type="date" name="to" value="{{ period_to }}"></label>
-    <button type="submit">Показать</button>
+  <form method="get" class="row wrap gap filter-bar">
+    <label class="field-label field-label--inline">С
+      <input class="input input--date" type="date" name="from" value="{{ period_from }}">
+    </label>
+    <label class="field-label field-label--inline">По
+      <input class="input input--date" type="date" name="to" value="{{ period_to }}">
+    </label>
+    <button type="submit" class="btn btn-primary">Показать</button>
   </form>
 
-  <div class="kpis">
-    <div class="kpi"><span class="num">{{ total }}</span><span class="lbl">кликов</span></div>
-    <div class="kpi"><span class="num">{{ uniques }}</span><span class="lbl">уникальных</span></div>
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <span class="kpi-card__num">{{ total }}</span>
+      <span class="kpi-card__lbl">кликов</span>
+    </div>
+    <div class="kpi-card kpi-card--accent">
+      <span class="kpi-card__num">{{ uniques }}</span>
+      <span class="kpi-card__lbl">уникальных</span>
+    </div>
   </div>
 
-  <script type="application/json" id="chart-data">{{ chart_json|safe }}</script>
-  <canvas id="chart" height="100"></canvas>
+  <div class="chart-panel">
+    <script type="application/json" id="chart-data">{{ chart_json|safe }}</script>
+    <canvas id="chart" height="110"></canvas>
+  </div>
 
-  <h2>Топ стран</h2>
-  <p class="muted small">Страна — из локальной базы GeoLite2 City. Если везде «—», выполните <code>python scripts/download_geolite.py</code> (нужен ключ <code>MAXMIND_LICENSE_KEY</code> с maxmind.com) или задайте <code>GEOIP_CITY_DB_PATH</code> к своему <code>.mmdb</code>.</p>
+  <h2 class="section-title">Топ стран</h2>
+  <p class="muted small">Страна по IP считается <strong>локально</strong>. Если есть GeoLite2 City (<code class="slug-inline">data/GeoLite2-City.mmdb</code> или <code class="slug-inline">GEOIP_CITY_DB_PATH</code>), используются страна, регион и город (ключ <code class="slug-inline">MAXMIND_LICENSE_KEY</code> или <code class="slug-inline">python scripts/download_geolite.py</code>). Если City нет, при старте подтягивается <strong>DB-IP Country</strong> (~8&nbsp;МиБ, без регистрации) в <code class="slug-inline">data/dbip-country.mmdb</code> — см. <a href="https://db-ip.com">db-ip.com</a> (CC&nbsp;BY&nbsp;4.0, нужна атрибуция). Свой файл: <code class="slug-inline">GEOIP_COUNTRY_DB_PATH</code>; отключить автоскачивание: <code class="slug-inline">GEOIP_COUNTRY_AUTO_DOWNLOAD=false</code>; вручную: <code class="slug-inline">python scripts/download_dbip_country.py</code>. <strong>Локально</strong> при заходе на <code class="slug-inline">localhost</code> / <code class="slug-inline">127.0.0.1</code> базы не возвращают страну — для отладки задайте публичный IP в <code class="slug-inline">GEOIP_DEBUG_FALLBACK_IP</code> (например <code class="slug-inline">8.8.8.8</code>) и сделайте новый клик.</p>
   {% if not countries %}
   <p class="muted">Нет данных за период.</p>
   {% else %}
-  <table class="table">
-    <thead><tr><th>Страна</th><th>Кликов</th></tr></thead>
-    <tbody>
-      {% for cc, n in countries %}
-      <tr><td>{{ cc or "—" }}</td><td>{{ n }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  {% if countries_missing_code %}
+  <p class="muted small">
+    {% if not geoip_db_present %}
+    <strong>Сейчас на сервере не найден файл GeoIP</strong> (ни <code class="slug-inline">GeoLite2-City.mmdb</code>, ни <code class="slug-inline">dbip-country.mmdb</code>) — проверьте логи при старте, сеть и переменные <code class="slug-inline">GEOIP_*</code>.
+    {% else %}
+    «—» в столбце страны значит, что <strong>в момент записи клика</strong> в базу не попал код страны (часто: база ещё не была на сервере, IP приватный, заход с <code class="slug-inline">localhost</code> без <code class="slug-inline">GEOIP_DEBUG_FALLBACK_IP</code>). Это не пересчитывается задним числом — сделайте новый тестовый переход по ссылке после появления MMDB на сервере.
+    {% endif %}
+  </p>
+  {% endif %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Страна</th><th class="num">Кликов</th></tr></thead>
+      <tbody>
+        {% for cc, n in countries %}
+        <tr><td>{{ cc or "—" }}</td><td class="num">{{ n }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
 
-  <h2>Экспорт CSV</h2>
+  <h2 class="section-title">Экспорт CSV</h2>
   <p class="muted">UTF‑8 с BOM для Excel.</p>
-  <div class="row wrap gap">
-    <a class="btn secondary" href="/admin/export/clicks.csv?link_id={{ link.id }}&from={{ period_from }}&to={{ period_to }}">Сырые клики</a>
-    <a class="btn secondary" href="/admin/export/summary.csv?link_id={{ link.id }}&from={{ period_from }}&to={{ period_to }}">Сводка по дням</a>
+  <div class="row wrap gap export-actions">
+    <a class="btn btn-secondary" href="/admin/export/clicks.csv?link_id={{ link.id }}&from={{ period_from }}&to={{ period_to }}">Сырые клики</a>
+    <a class="btn btn-secondary" href="/admin/export/summary.csv?link_id={{ link.id }}&from={{ period_from }}&to={{ period_to }}">Сводка по дням</a>
   </div>
 </section>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -60,18 +83,49 @@ document.addEventListener('DOMContentLoaded', () => {
   const labels = days.map(d => d.day);
   const clicks = days.map(d => d.clicks);
   const uniques = days.map(d => d.uniques);
+  const tick = '#94a3b8';
+  const grid = 'rgba(148, 163, 184, 0.12)';
+  const narrow = window.matchMedia('(max-width: 768px)').matches;
+  const narrowFont = narrow ? 10 : 12;
   new Chart(el, {
     type: 'bar',
     data: {
       labels,
       datasets: [
-        { label: 'Клики', data: clicks, backgroundColor: 'rgba(59,130,246,0.6)' },
-        { label: 'Уникальные', data: uniques, backgroundColor: 'rgba(16,185,129,0.6)' },
+        { label: 'Клики', data: clicks, backgroundColor: 'rgba(99, 102, 241, 0.75)', borderRadius: 6 },
+        { label: 'Уникальные', data: uniques, backgroundColor: 'rgba(45, 212, 191, 0.7)', borderRadius: 6 },
       ],
     },
     options: {
       responsive: true,
-      scales: { x: { stacked: false }, y: { beginAtZero: true } },
+      plugins: {
+        legend: {
+          position: narrow ? 'bottom' : 'top',
+          labels: {
+            color: tick,
+            font: { family: 'DM Sans', size: narrowFont },
+            boxWidth: narrow ? 10 : 12,
+            padding: narrow ? 8 : 12,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: tick,
+            font: { family: 'DM Sans', size: narrowFont },
+            maxRotation: narrow ? 60 : 0,
+            autoSkip: true,
+            maxTicksLimit: narrow ? 8 : 24,
+          },
+          grid: { color: grid },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: tick, font: { family: 'DM Sans', size: narrowFont } },
+          grid: { color: grid },
+        },
+      },
     },
   });
 });

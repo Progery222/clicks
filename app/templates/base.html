@@ -2,25 +2,42 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c1222">
   <title>{% block title %}Bio links{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   {% block head %}{% endblock %}
 </head>
 <body>
-  <header class="top">
-    <div class="top-left">
-      <button type="button" class="btn-back" id="nav-back" title="Предыдущая страница">← Назад</button>
-      <a class="brand" href="/admin">Bio links</a>
-    </div>
-    <nav class="nav">
+  <div class="bg-grid" aria-hidden="true"></div>
+  <header class="top{% if request.session.get('admin') %} top--has-nav{% endif %}" id="site-top">
+    <div class="top-row">
+      <div class="top-left">
+        <button type="button" class="btn-back" id="nav-back" title="Предыдущая страница">← Назад</button>
+        <a class="brand" href="/admin">
+          <span class="brand__mark" aria-hidden="true"></span>
+          <span class="brand__text">Bio links</span>
+        </a>
+      </div>
       {% if request.session.get('admin') %}
-      <a href="/admin">Ссылки</a>
-      <a href="/admin/links/new">Новая</a>
-      <a href="/privacy">Конфиденциальность</a>
-      <a href="/admin/logout">Выход</a>
+      <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="main-nav" aria-label="Меню">
+        <span class="nav-toggle__bar" aria-hidden="true"></span>
+        <span class="nav-toggle__bar" aria-hidden="true"></span>
+        <span class="nav-toggle__bar" aria-hidden="true"></span>
+      </button>
       {% endif %}
+    </div>
+    {% if request.session.get('admin') %}
+    <nav class="nav" id="main-nav" aria-label="Разделы админки">
+      <a class="nav-link" href="/admin">Ссылки</a>
+      <a class="nav-link" href="/admin/links/new">Новая</a>
+      <a class="nav-link" href="/privacy">Конфиденциальность</a>
+      <a class="nav-link nav-link--muted" href="/admin/logout">Выход</a>
     </nav>
+    {% endif %}
   </header>
   <main class="main">
     {% block content %}{% endblock %}
@@ -28,11 +45,34 @@
   <script>
     (function () {
       var b = document.getElementById("nav-back");
-      if (!b) return;
-      b.addEventListener("click", function () {
+      if (b) b.addEventListener("click", function () {
         if (window.history.length > 1) window.history.back();
         else window.location.href = "/admin";
       });
+      var top = document.getElementById("site-top");
+      var toggle = document.getElementById("nav-toggle");
+      var nav = document.getElementById("main-nav");
+      if (!top || !toggle || !nav) return;
+      function setOpen(open) {
+        top.classList.toggle("top--nav-open", open);
+        toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        toggle.setAttribute("aria-label", open ? "Закрыть меню" : "Меню");
+      }
+      toggle.addEventListener("click", function () {
+        setOpen(!top.classList.contains("top--nav-open"));
+      });
+      nav.querySelectorAll("a").forEach(function (a) {
+        a.addEventListener("click", function () { setOpen(false); });
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") setOpen(false);
+      });
+      var mqWide = window.matchMedia("(min-width: 769px)");
+      function closeNavIfWide(e) {
+        if (e.matches) setOpen(false);
+      }
+      if (mqWide.addEventListener) mqWide.addEventListener("change", closeNavIfWide);
+      else if (mqWide.addListener) mqWide.addListener(closeNavIfWide);
     })();
   </script>
 </body>

@@ -24,6 +24,15 @@ class Settings(BaseSettings):
 
     # bcrypt truncates at 72 bytes; passlib handles str
     geoip_city_db_path: str | None = None
+    maxmind_license_key: str | None = None
+
+    # DB-IP Country MMDB (без регистрации), см. app/services/dbip_country_download.py
+    geoip_country_db_path: str | None = None
+    geoip_country_auto_download: bool = True
+    geoip_country_db_url: str | None = None
+    # Только для локальной отладки: если реальный IP клиента не глобальный (127.0.0.1, 192.168.x.x),
+    # страна берётся по этому публичному адресу. В проде не задавать.
+    geoip_debug_fallback_ip: str | None = None
 
     # Click retention in days (GDPR-style cleanup)
     click_retention_days: int = 180

@@ -36,12 +36,10 @@ async def redirect_slug(
     incoming = parse_vid_cookie(raw_vid)
     set_cookie_val: str | None = None
     if incoming:
-        use_fp = False
-        visitor_uuid: uuid.UUID | None = incoming
+        visitor_uuid = incoming
     else:
-        use_fp = True
-        visitor_uuid = None
-        set_cookie_val = str(uuid.uuid4())
+        visitor_uuid = uuid.uuid4()
+        set_cookie_val = str(visitor_uuid)
 
     asyncio.create_task(
         log_click_background(
@@ -50,7 +48,6 @@ async def redirect_slug(
             user_agent=ua,
             referer=ref,
             visitor_uuid=visitor_uuid,
-            use_fingerprint=use_fp,
         )
     )
 

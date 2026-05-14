@@ -20,6 +20,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models import Click, Link
 from app.security import verify_env_password
+from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_path
 from app.services.stats import (
     click_day_bucket_utc,
     dashboard_click_counts,
@@ -260,6 +261,11 @@ async def link_stats(
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     by_day = await stats_by_day(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
+
+    geoip_db_present = (
+        resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
+    )
+    countries_missing_code = any((not cc) for cc, _ in countries)
     base = str(request.base_url).rstrip("/")
     short_url = f"{base}/r/{link.slug}"
     return templates.TemplateResponse(
@@ -275,6 +281,8 @@ async def link_stats(
             "period_from": date_from if date_from else start.date().isoformat(),
             "period_to": date_to if date_to else end.date().isoformat(),
             "short_url": short_url,
+            "geoip_db_present": geoip_db_present,
+            "countries_missing_code": countries_missing_code,
         },
     )
 

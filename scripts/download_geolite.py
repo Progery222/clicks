@@ -14,17 +14,18 @@ Windows PowerShell:
 
 from __future__ import annotations
 
-import io
 import os
 import sys
-import tarfile
-import tempfile
 from pathlib import Path
 
-import httpx
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
-EDITION = "GeoLite2-City"
+from app.services.geolite_download import download_geolite_city, project_data_dir
+
 LICENSE_ENV = "MAXMIND_LICENSE_KEY"
+DEFAULT_FILENAME = "GeoLite2-City.mmdb"
 
 
 def main() -> None:
@@ -36,50 +37,12 @@ def main() -> None:
         )
         sys.exit(1)
 
-    root = Path(__file__).resolve().parents[1]
-    out_dir = root / "data"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / "GeoLite2-City.mmdb"
-
-    url = (
-        "https://download.maxmind.com/app/geoip_download"
-        f"?edition_id={EDITION}&license_key={key}&suffix=tar.gz"
-    )
-
-    with httpx.Client(follow_redirects=True, timeout=180.0) as client:
-        r = client.get(url)
-        if r.status_code != 200:
-            print(f"Ошибка HTTP {r.status_code}: проверьте ключ {LICENSE_ENV}.", file=sys.stderr)
-            sys.exit(1)
-        data = r.content
-
+    out_file = project_data_dir() / DEFAULT_FILENAME
     try:
-        tar = tarfile.open(fileobj=io.BytesIO(data), mode="r:gz")
-    except tarfile.TarError as e:
-        head = data[:1200].decode("utf-8", errors="replace")
-        print(f"Ответ не похож на tar.gz ({e}). Начало ответа:\n{head}", file=sys.stderr)
+        download_geolite_city(key, out_file)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
         sys.exit(1)
-
-    with tar:
-        mmdb_member = None
-        for m in tar.getmembers():
-            if not m.isfile():
-                continue
-            if m.name.endswith("GeoLite2-City.mmdb"):
-                mmdb_member = m
-                break
-        if mmdb_member is None:
-            print("В архиве не найден GeoLite2-City.mmdb", file=sys.stderr)
-            sys.exit(1)
-        f = tar.extractfile(mmdb_member)
-        if f is None:
-            sys.exit(1)
-        blob = f.read()
-        if len(blob) < 1000:
-            print("Слишком маленький файл .mmdb", file=sys.stderr)
-            sys.exit(1)
-        out_file.write_bytes(blob)
-
     mib = out_file.stat().st_size // 1024 // 1024
     print(f"Готово: {out_file} (~{mib} МиБ)")
 

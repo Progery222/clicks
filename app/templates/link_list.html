@@ -1,46 +1,54 @@
 {% extends "base.html" %}
 {% block title %}Ссылки — Bio links{% endblock %}
 {% block content %}
-<section class="card">
-  <div class="row between">
-    <h1>Короткие ссылки</h1>
-    <a class="btn" href="/admin/links/new">Создать</a>
+<section class="card card--hero">
+  <div class="row between wrap">
+    <div>
+      <h1 class="page-title">Короткие ссылки</h1>
+      <p class="muted small">«Всего» — за всё время. «Сегодня» и графики по дням — календарные сутки <strong>UTC</strong>.</p>
+    </div>
+    <a class="btn btn-primary" href="/admin/links/new">+ Создать ссылку</a>
   </div>
-  <p class="muted small">«Всего» — за всё время. «Сегодня» и графики по дням — календарные сутки <strong>UTC</strong> (как в БД после правки).</p>
-  {% if not link_rows %}
-  <p>Пока нет ссылок.</p>
+  {% if link_rows is defined and link_rows %}
+  <div class="table-wrap">
+    <table class="table table--wide">
+      <thead>
+        <tr>
+          <th>Slug</th>
+          <th>Метка</th>
+          <th>Цель</th>
+          <th class="num">Всего</th>
+          <th class="num">Сегодня</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in link_rows %}
+        <tr>
+          <td><span class="slug-pill"><code>{{ row.link.slug }}</code></span></td>
+          <td>{{ row.link.label or "—" }}</td>
+          <td class="truncate" title="{{ row.link.destination_url }}">{{ row.link.destination_url }}</td>
+          <td class="num"><span class="stat-pill">{{ row.total }}</span></td>
+          <td class="num"><span class="stat-pill stat-pill--accent">{{ row.today }}</span></td>
+          <td class="actions">
+            <a class="link-action" href="/admin/links/{{ row.link.id }}/stats">Статистика</a>
+            <a class="link-action" href="/admin/links/{{ row.link.id }}/edit">Правка</a>
+            <form method="post" action="/admin/links/{{ row.link.id }}/delete" class="inline"
+                  onsubmit="return confirm('Удалить ссылку и всю статистику?');">
+              <button type="submit" class="link-action link-action--danger">Удалить</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
-  <table class="table">
-    <thead>
-      <tr>
-        <th>Slug</th>
-        <th>Метка</th>
-        <th>Цель</th>
-        <th class="num">Всего</th>
-        <th class="num">Сегодня</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in link_rows %}
-      <tr>
-        <td><code>{{ row.link.slug }}</code></td>
-        <td>{{ row.link.label or "—" }}</td>
-        <td class="truncate" title="{{ row.link.destination_url }}">{{ row.link.destination_url }}</td>
-        <td class="num">{{ row.total }}</td>
-        <td class="num">{{ row.today }}</td>
-        <td class="actions">
-          <a href="/admin/links/{{ row.link.id }}/stats">Статистика</a>
-          <a href="/admin/links/{{ row.link.id }}/edit">Правка</a>
-          <form method="post" action="/admin/links/{{ row.link.id }}/delete" class="inline"
-                onsubmit="return confirm('Удалить ссылку и всю статистику?');">
-            <button type="submit" class="link danger">Удалить</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="empty-state">
+    <p class="empty-state__title">Пока нет ссылок</p>
+    <p class="muted">Создайте первую короткую ссылку для TikTok, Instagram и т.д.</p>
+    <a class="btn btn-primary" href="/admin/links/new">Создать ссылку</a>
+  </div>
   {% endif %}
 </section>
 {% endblock %}
