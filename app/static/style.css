@@ -499,6 +499,15 @@ a:hover {
   background: rgba(129, 140, 248, 0.06);
 }
 
+.table--wide tbody tr.link-row {
+  cursor: pointer;
+}
+
+.table--wide tbody tr.link-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .table th {
   font-size: 0.75rem;
   font-weight: 600;

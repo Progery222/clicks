@@ -24,16 +24,13 @@
       </thead>
       <tbody>
         {% for row in link_rows %}
-        <tr>
+        <tr class="link-row" data-stats-href="/admin/links/{{ row.link.id }}/stats" tabindex="0">
           <td><span class="slug-pill"><code>{{ row.link.slug }}</code></span></td>
           <td>{{ row.link.label or "—" }}</td>
           <td class="truncate" title="{{ row.link.destination_url }}">{{ row.link.destination_url }}</td>
           <td class="num"><span class="stat-pill">{{ row.total }}</span></td>
           <td class="num"><span class="stat-pill stat-pill--accent">{{ row.today }}</span></td>
           <td class="actions actions--icons">
-            <a class="icon-btn" href="/admin/links/{{ row.link.id }}/stats" title="Статистика" aria-label="Статистика">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-6"/></svg>
-            </a>
             <a class="icon-btn" href="/admin/links/{{ row.link.id }}/edit" title="Правка" aria-label="Правка">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
             </a>
@@ -59,4 +56,30 @@
   </div>
   {% endif %}
 </section>
+<script>
+(function () {
+  function isActionTarget(el) {
+    return el && el.closest && el.closest("a.icon-btn, button.icon-btn, form.icon-btn-form");
+  }
+  document.querySelectorAll("tr.link-row").forEach(function (tr) {
+    tr.addEventListener("click", function (e) {
+      if (isActionTarget(e.target)) return;
+      var url = tr.getAttribute("data-stats-href");
+      if (!url) return;
+      if (e.metaKey || e.ctrlKey) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        return;
+      }
+      window.location.href = url;
+    });
+    tr.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (isActionTarget(e.target)) return;
+      e.preventDefault();
+      var url = tr.getAttribute("data-stats-href");
+      if (url) window.location.href = url;
+    });
+  });
+})();
+</script>
 {% endblock %}
