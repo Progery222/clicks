@@ -21,6 +21,8 @@ class Settings(BaseSettings):
         return v
     secret_key: str = "change-me-in-production"
     admin_password: str = "admin"
+    # Если пусто — эндпоинты /api/v1/* отвечают 503 (см. app/routers/api_v1.py).
+    api_token: str | None = None
 
     # bcrypt truncates at 72 bytes; passlib handles str
     geoip_city_db_path: str | None = None

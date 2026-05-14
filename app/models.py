@@ -55,3 +55,14 @@ class Click(Base):
     dedupe_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
 
     link: Mapped["Link"] = relationship(back_populates="clicks")
+
+
+class IpAuthLockout(Base):
+    """Счётчики неудачных попыток входа в админку / API и бан по IP."""
+
+    __tablename__ = "ip_auth_lockout"
+
+    ip: Mapped[str] = mapped_column(String(45), primary_key=True)
+    admin_failures: Mapped[int] = mapped_column(default=0, nullable=False)
+    api_failures: Mapped[int] = mapped_column(default=0, nullable=False)
+    banned_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

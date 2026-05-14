@@ -26,8 +26,8 @@
         {% for row in link_rows %}
         <tr class="link-row" data-link-id="{{ row.link.id }}" data-stats-href="/admin/links/{{ row.link.id }}/stats" tabindex="0">
           <td><span class="slug-pill"><code>{{ row.link.slug }}</code></span></td>
-          <td>{{ row.link.label or "—" }}</td>
-          <td class="truncate" title="{{ row.link.destination_url }}">{{ row.link.destination_url }}</td>
+          <td class="truncate" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>{{ row.link.label or "—" }}</td>
+          <td class="truncate" title="{{ row.link.destination_url | e }}">{{ row.link.destination_url }}</td>
           <td class="num"><span class="stat-pill js-dash-total">{{ row.total }}</span></td>
           <td class="num"><span class="stat-pill stat-pill--accent js-dash-today">{{ row.today }}</span></td>
           <td class="actions actions--icons">

@@ -13,7 +13,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.jobs import cleanup_old_clicks
-from app.routers import admin, health, redirect
+from app.middleware.ip_ban import IpAuthBanMiddleware
+from app.routers import admin, api_v1, health, redirect
 from app.services.dbip_country_download import ensure_dbip_country_db
 from app.services.geolite_download import ensure_geolite_city_db
 from app.services.geoip import (
@@ -31,7 +32,7 @@ class NoCacheAdminHtmlMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         path = request.url.path
-        if path.startswith("/admin") or path == "/privacy":
+        if path.startswith("/admin") or path.startswith("/api") or path == "/privacy":
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Vary"] = "Cookie"
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
         https_only=settings.session_cookie_https_only,
     )
     app.add_middleware(NoCacheAdminHtmlMiddleware)
+    app.add_middleware(IpAuthBanMiddleware)
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
@@ -101,6 +103,7 @@ def create_app() -> FastAPI:
         return templates.TemplateResponse("privacy.html", {"request": request})
 
     app.include_router(health.router)
+    app.include_router(api_v1.router)
     app.include_router(admin.router)
     app.include_router(redirect.router)
     return app

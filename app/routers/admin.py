@@ -1,12 +1,8 @@
-import csv
-import io
 import json
 import logging
 import uuid
 from collections.abc import Iterator
-from datetime import datetime, timedelta
 from urllib.parse import quote
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -17,9 +13,17 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.csv_stream import stream_csv
 from app.database import get_db
 from app.models import Click, Link
 from app.security import verify_env_password
+from app.services.ip_lockout import (
+    clear_admin_failures,
+    client_ip,
+    is_ip_banned_now,
+    record_admin_password_failure,
+    MSG_BAN_HTML,
+)
 from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_path
 from app.services.stats import (
     click_day_bucket_utc,
@@ -27,6 +31,7 @@ from app.services.stats import (
     stats_summary,
     top_countries,
 )
+from app.stats_range import active_preset, form_period_dates, parse_range, stats_range
 from app.utils.slug import random_slug
 
 log = logging.getLogger(__name__)
@@ -45,23 +50,56 @@ def _require_admin(request: Request) -> None:
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
+async def login_page(request: Request, db: AsyncSession = Depends(get_db)):
     if request.session.get("admin"):
         return RedirectResponse("/admin", status_code=302)
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    ip = client_ip(request)
+    blocked = request.query_params.get("blocked") == "1"
+    banned_now, _ = await is_ip_banned_now(db, ip)
+    if banned_now:
+        blocked = True
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "error": None,
+            "blocked": blocked,
+            "block_message": MSG_BAN_HTML if blocked else None,
+        },
+    )
 
 
 @router.post("/login", response_class=HTMLResponse)
 async def login_post(
     request: Request,
     password: str = Form(...),
+    db: AsyncSession = Depends(get_db),
 ):
     settings = get_settings()
+    ip = client_ip(request)
     if verify_env_password(password, settings.admin_password):
+        await clear_admin_failures(db, ip)
         request.session["admin"] = True
         return RedirectResponse("/admin", status_code=302)
+    banned = await record_admin_password_failure(db, ip)
+    if banned:
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "error": None,
+                "blocked": True,
+                "block_message": MSG_BAN_HTML,
+            },
+        )
     return templates.TemplateResponse(
-        "login.html", {"request": request, "error": "Неверный пароль"}
+        "login.html",
+        {
+            "request": request,
+            "error": "Неверный пароль",
+            "blocked": False,
+            "block_message": None,
+        },
     )
 
 
@@ -240,113 +278,6 @@ async def clear_link_clicks(
     return RedirectResponse(f"/admin/links/{link.id}/stats", status_code=302)
 
 
-def _parse_range(
-    from_s: str | None, to_s: str | None
-) -> tuple[datetime, datetime]:
-    from datetime import date as date_cls
-    from datetime import time as time_cls
-
-    tz = ZoneInfo("UTC")
-    now = datetime.now(tz)
-
-    def parse_day(s: str, *, end_exclusive_next_day: bool) -> datetime:
-        if len(s) == 10:
-            d = date_cls.fromisoformat(s)
-            if end_exclusive_next_day:
-                d = d + timedelta(days=1)
-            return datetime.combine(d, time_cls.min, tzinfo=tz)
-        return datetime.fromisoformat(s).replace(tzinfo=tz)
-
-    if to_s:
-        try:
-            if len(to_s) == 10:
-                end = parse_day(to_s, end_exclusive_next_day=True)
-            else:
-                end = datetime.fromisoformat(to_s).replace(tzinfo=tz)
-        except ValueError:
-            end = now
-    else:
-        end = now
-
-    if from_s:
-        try:
-            if len(from_s) == 10:
-                start = parse_day(from_s, end_exclusive_next_day=False)
-            else:
-                start = datetime.fromisoformat(from_s).replace(tzinfo=tz)
-        except ValueError:
-            start = end - timedelta(days=30)
-    else:
-        start = end - timedelta(days=30)
-
-    if start >= end:
-        start = end - timedelta(days=1)
-    return start, end
-
-
-def _active_preset(
-    date_from: str | None, date_to: str | None, preset: str | None
-) -> str:
-    if (date_from and date_from.strip()) or (date_to and date_to.strip()):
-        return "custom"
-    p = (preset or "").strip().lower()
-    if p in ("week", "all"):
-        return p
-    return "today"
-
-
-def _stats_range(
-    link: Link,
-    date_from: str | None,
-    date_to: str | None,
-    preset: str | None,
-) -> tuple[datetime, datetime]:
-    """Период: свой диапазон (from/to) или пресет today / week / all (UTC-календарь)."""
-    from datetime import date as date_cls
-    from datetime import time as time_cls
-
-    tz = ZoneInfo("UTC")
-    now = datetime.now(tz)
-    today: date_cls = now.date()
-
-    custom = (date_from and date_from.strip()) or (date_to and date_to.strip())
-    if custom:
-        return _parse_range(date_from, date_to)
-
-    def day_start(d: date_cls) -> datetime:
-        return datetime.combine(d, time_cls.min, tzinfo=tz)
-
-    p = (preset or "").strip().lower()
-    if p == "week":
-        start_d = today - timedelta(days=6)
-        return day_start(start_d), day_start(today + timedelta(days=1))
-    if p == "all":
-        lc = link.created_at
-        if lc.tzinfo is None:
-            lc = lc.replace(tzinfo=tz)
-        else:
-            lc = lc.astimezone(tz)
-        start = day_start(lc.date())
-        end = day_start(today + timedelta(days=1))
-        if start >= end:
-            start = day_start(today)
-        return start, end
-    return day_start(today), day_start(today + timedelta(days=1))
-
-
-def _form_period_dates(start: datetime, end: datetime) -> tuple[str, str]:
-    """Даты для полей type=date: последний день включительно при end = 00:00 следующего дня."""
-    pf = start.date().isoformat()
-    if end.hour == 0 and end.minute == 0 and end.second == 0 and end.microsecond == 0:
-        last = end.date() - timedelta(days=1)
-    else:
-        last = end.date()
-    pt = last.isoformat()
-    if pf > pt:
-        pt = pf
-    return pf, pt
-
-
 @router.get("/links/{link_id}/stats/data")
 async def link_stats_data(
     request: Request,
@@ -361,7 +292,7 @@ async def link_stats_data(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
-    start, end = _stats_range(link, date_from, date_to, preset)
+    start, end = stats_range(link, date_from, date_to, preset)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
     geoip_db_present = (
@@ -392,9 +323,9 @@ async def link_stats(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
-    start, end = _stats_range(link, date_from, date_to, preset)
-    active_preset = _active_preset(date_from, date_to, preset)
-    period_from, period_to = _form_period_dates(start, end)
+    start, end = stats_range(link, date_from, date_to, preset)
+    active = active_preset(date_from, date_to, preset)
+    period_from, period_to = form_period_dates(start, end)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
 
@@ -414,29 +345,12 @@ async def link_stats(
             "countries": countries,
             "period_from": period_from,
             "period_to": period_to,
-            "active_preset": active_preset,
+            "active_preset": active,
             "short_url": short_url,
             "geoip_db_present": geoip_db_present,
             "countries_missing_code": countries_missing_code,
         },
     )
-
-
-def _csv_stream(rows_iter: Iterator[list[object]], header: list[str]) -> Iterator[bytes]:
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(header)
-    yield "\ufeff".encode("utf-8")
-    chunk = buf.getvalue()
-    buf.seek(0)
-    buf.truncate(0)
-    yield chunk.encode("utf-8")
-    for row in rows_iter:
-        w.writerow(row)
-        chunk = buf.getvalue()
-        buf.seek(0)
-        buf.truncate(0)
-        yield chunk.encode("utf-8")
 
 
 @router.get("/export/clicks.csv")
@@ -448,7 +362,7 @@ async def export_clicks_csv(
     date_to: str | None = Query(None, alias="to"),
 ) -> StreamingResponse:
     _require_admin(request)
-    start, end = _parse_range(date_from, date_to)
+    start, end = parse_range(date_from, date_to)
     stmt = select(Click).where(Click.created_at >= start, Click.created_at < end)
     if link_id is not None:
         stmt = stmt.where(Click.link_id == link_id)
@@ -487,7 +401,7 @@ async def export_clicks_csv(
     ]
     name = f"clicks_{start.date()}_{end.date()}.csv"
     return StreamingResponse(
-        _csv_stream(row_iter(), header),
+        stream_csv(row_iter(), header),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{quote(name)}"'},
     )
@@ -502,7 +416,7 @@ async def export_summary_csv(
     date_to: str | None = Query(None, alias="to"),
 ) -> StreamingResponse:
     _require_admin(request)
-    start, end = _parse_range(date_from, date_to)
+    start, end = parse_range(date_from, date_to)
     day = click_day_bucket_utc().label("day")
     stmt = (
         select(
@@ -528,7 +442,7 @@ async def export_summary_csv(
 
     name = f"summary_{start.date()}_{end.date()}.csv"
     return StreamingResponse(
-        _csv_stream(row_iter(), ["link_id", "day", "clicks", "uniques"]),
+        stream_csv(row_iter(), ["link_id", "day", "clicks", "uniques"]),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{quote(name)}"'},
     )

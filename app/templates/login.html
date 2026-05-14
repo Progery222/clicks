@@ -7,6 +7,9 @@
     <h1 class="page-title">Вход</h1>
     <p class="muted small">Панель управления короткими ссылками</p>
   </div>
+  {% if blocked %}
+  <p class="error error--box">{{ block_message }}</p>
+  {% else %}
   {% if error %}<p class="error error--box">{{ error }}</p>{% endif %}
   <form method="post" action="/admin/login" class="stack">
     <label class="field-label">Пароль
@@ -14,5 +17,6 @@
     </label>
     <button type="submit" class="btn btn-primary btn-block">Войти</button>
   </form>
+  {% endif %}
 </section>
 {% endblock %}
