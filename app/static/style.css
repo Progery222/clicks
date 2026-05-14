@@ -985,14 +985,6 @@ button[type="submit"].btn-primary {
   font-size: 0.85rem;
 }
 
-.chart-panel {
-  margin: 0.5rem 0 1.5rem;
-  padding: 1rem 1rem 0.5rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.25);
-}
-
 .stats-clear-panel {
   margin: 0.5rem 0 1.25rem;
   padding: 1rem 1.1rem;
@@ -1192,12 +1184,6 @@ button[type="submit"].btn-primary {
 
   .kpi-card__num {
     font-size: 1.65rem;
-  }
-
-  .chart-panel {
-    padding: 0.75rem 0.5rem 0.35rem;
-    margin-left: -0.25rem;
-    margin-right: -0.25rem;
   }
 
   .row.wrap.gap .btn {

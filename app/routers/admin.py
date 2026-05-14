@@ -24,7 +24,6 @@ from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_pa
 from app.services.stats import (
     click_day_bucket_utc,
     dashboard_click_counts,
-    stats_by_day,
     stats_summary,
     top_countries,
 )
@@ -293,14 +292,13 @@ async def link_stats_data(
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
 ) -> JSONResponse:
-    """JSON для страницы статистики: обновление KPI, графика и топа стран без перезагрузки."""
+    """JSON для страницы статистики: обновление KPI и топа стран без перезагрузки."""
     _require_admin(request)
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
     start, end = _parse_range(date_from, date_to)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
-    by_day = await stats_by_day(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
     geoip_db_present = (
         resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
@@ -310,7 +308,6 @@ async def link_stats_data(
         {
             "total": total,
             "uniques": uniq,
-            "by_day": by_day,
             "countries": [{"code": c or "", "count": n} for c, n in countries],
             "countries_missing_code": countries_missing_code,
             "geoip_db_present": geoip_db_present,
@@ -332,7 +329,6 @@ async def link_stats(
         raise HTTPException(404)
     start, end = _parse_range(date_from, date_to)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
-    by_day = await stats_by_day(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
 
     geoip_db_present = (
@@ -348,8 +344,6 @@ async def link_stats(
             "link": link,
             "total": total,
             "uniques": uniq,
-            "by_day": by_day,
-            "chart_json": json.dumps(by_day),
             "countries": countries,
             "period_from": date_from if date_from else start.date().isoformat(),
             "period_to": date_to if date_to else end.date().isoformat(),

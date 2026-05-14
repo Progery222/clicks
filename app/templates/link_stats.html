@@ -44,16 +44,11 @@
   <div class="stats-clear-panel">
     <form method="post" action="/admin/links/{{ link.id }}/clicks/clear" class="inline"
           data-confirm-title="Очистить статистику кликов?"
-          data-confirm-message="Будут удалены все записи кликов по этой ссылке: график, счётчики и топ стран. Сама короткая ссылка и целевой URL останутся. Восстановить записи будет нельзя."
+          data-confirm-message="Будут удалены все записи кликов по этой ссылке: счётчики и топ стран. Сама короткая ссылка и целевой URL останутся. Восстановить записи будет нельзя."
           data-confirm-ok="Очистить">
       <button type="submit" class="btn btn-danger">Очистить статистику кликов</button>
     </form>
     <p class="muted small stats-clear-hint">Безвозвратно удаляются все сохранённые клики по этой ссылке (IP, гео, cookie‑идентификатор посетителя в рамках записи).</p>
-  </div>
-
-  <div class="chart-panel">
-    <script type="application/json" id="chart-data">{{ chart_json|safe }}</script>
-    <canvas id="chart" height="110"></canvas>
   </div>
 
   <h2 class="section-title">Топ стран</h2>
@@ -90,64 +85,9 @@
     <a class="btn btn-secondary" href="/admin/export/summary.csv?link_id={{ link.id }}&from={{ period_from }}&to={{ period_to }}">Сводка по дням</a>
   </div>
 </section>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   var section = document.querySelector("section.card[data-stats-link-id]");
-  var el = document.getElementById("chart");
-  var raw = document.getElementById("chart-data");
-  if (!el || !raw || !window.Chart) return;
-
-  var days = JSON.parse(raw.textContent || "[]");
-  var labels = days.map(function (d) { return d.day; });
-  var clicks = days.map(function (d) { return d.clicks; });
-  var uniques = days.map(function (d) { return d.uniques; });
-  var tick = "#94a3b8";
-  var grid = "rgba(148, 163, 184, 0.12)";
-  var narrow = window.matchMedia("(max-width: 768px)").matches;
-  var narrowFont = narrow ? 10 : 12;
-  var statsChart = new Chart(el, {
-    type: "bar",
-    data: {
-      labels: labels,
-      datasets: [
-        { label: "Клики", data: clicks, backgroundColor: "rgba(99, 102, 241, 0.75)", borderRadius: 6 },
-        { label: "Уникальные", data: uniques, backgroundColor: "rgba(45, 212, 191, 0.7)", borderRadius: 6 },
-      ],
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          position: narrow ? "bottom" : "top",
-          labels: {
-            color: tick,
-            font: { family: "DM Sans", size: narrowFont },
-            boxWidth: narrow ? 10 : 12,
-            padding: narrow ? 8 : 12,
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: {
-            color: tick,
-            font: { family: "DM Sans", size: narrowFont },
-            maxRotation: narrow ? 60 : 0,
-            autoSkip: true,
-            maxTicksLimit: narrow ? 8 : 24,
-          },
-          grid: { color: grid },
-        },
-        y: {
-          beginAtZero: true,
-          ticks: { color: tick, font: { family: "DM Sans", size: narrowFont } },
-          grid: { color: grid },
-        },
-      },
-    },
-  });
-
   if (!section) return;
   var linkId = section.getAttribute("data-stats-link-id");
   if (!linkId) return;
@@ -217,11 +157,6 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(function (data) {
         if (elTotal) elTotal.textContent = String(data.total);
         if (elUniq) elUniq.textContent = String(data.uniques);
-        var bd = data.by_day || [];
-        statsChart.data.labels = bd.map(function (d) { return d.day; });
-        statsChart.data.datasets[0].data = bd.map(function (d) { return d.clicks; });
-        statsChart.data.datasets[1].data = bd.map(function (d) { return d.uniques; });
-        statsChart.update("none");
         renderCountries(data);
       })
       .catch(function () {});
