@@ -41,7 +41,8 @@ class NoCacheAdminHtmlMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings = get_settings()
-    log = logging.getLogger(__name__)
+    # В Docker/Railway в stdout попадает в основном uvicorn — иначе app.main INFO не виден.
+    boot_log = logging.getLogger("uvicorn.error")
     geolite_downloaded = False
     try:
         geolite_downloaded = await asyncio.to_thread(
@@ -50,7 +51,7 @@ async def lifespan(_app: FastAPI):
             geoip_city_db_path=settings.geoip_city_db_path,
         )
     except Exception:
-        log.exception("GeoLite bootstrap failed")
+        boot_log.exception("GeoLite bootstrap failed")
 
     dbip_downloaded = False
     try:
@@ -62,12 +63,12 @@ async def lifespan(_app: FastAPI):
                 download_url=settings.geoip_country_db_url,
             )
     except Exception:
-        log.exception("DB-IP Country bootstrap failed")
+        boot_log.exception("DB-IP Country bootstrap failed")
 
     if geolite_downloaded or dbip_downloaded:
         reset_geoip_reader()
 
-    log.info(
+    boot_log.info(
         "GeoIP после старта: city_db=%s country_db=%s",
         resolved_city_mmdb_path(),
         resolved_country_mmdb_path(),
