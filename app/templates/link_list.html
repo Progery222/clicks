@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Ссылки — Bio links{% endblock %}
 {% block content %}
-<section class="card card--hero">
+<section class="card card--hero card--flush">
   <div class="row between wrap">
     <div>
       <h1 class="page-title">Короткие ссылки</h1>
@@ -10,7 +10,7 @@
     <a class="btn btn-primary" href="/admin/links/new">+ Создать ссылку</a>
   </div>
   {% if link_rows is defined and link_rows %}
-  <div class="table-wrap">
+  <div class="table-wrap table-wrap--flush">
     <table class="table table--wide">
       <thead>
         <tr>
