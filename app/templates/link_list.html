@@ -13,108 +13,132 @@
     </div>
   </div>
 
-  <div class="filter-bar">
-    <div class="filter-bar__group">
-      <span class="filter-bar__label">Профиль</span>
-      <div class="filter-bar__pills">
+  <div class="links-layout">
+    <aside class="links-sidebar" aria-label="Фильтр по профилю">
+      <div class="links-sidebar__search-row">
+        <div class="links-sidebar__search-wrap">
+          <span class="links-sidebar__search-icon" aria-hidden="true">⌕</span>
+          <input type="search" id="profile-search" class="links-sidebar__search input"
+            placeholder="Поиск профилей" autocomplete="off" spellcheck="false">
+        </div>
+        <a href="/admin/profiles" class="links-sidebar__add" title="Управление профилями">+</a>
+      </div>
+      <nav class="links-sidebar__nav">
         {% for pf in profile_filters | default([]) %}
-        <a class="filter-pill{% if (filter_profile | default('all')) == pf.id %} filter-pill--active{% endif %}"
-          href="{{ admin_filter_href(pf.id, filter_platform | default('all')) }}">
-          {% if pf.color %}<span class="filter-pill__dot" style="background: {{ pf.color }}"></span>{% endif %}
-          {{ pf.name }}<span class="filter-pill__count">{{ pf.count }}</span>
+        {% if pf.id in ['all', 'none'] %}
+        <a class="sidebar-item{% if (filter_profile | default('all')) == pf.id %} sidebar-item--active{% endif %}{% if pf.id == 'none' %} sidebar-item--dim{% endif %}"
+          href="{{ admin_filter_href(pf.id, filter_platform | default('all')) }}"
+          data-profile-label="{{ pf.name | lower }}">
+          <span class="sidebar-item__ring{% if pf.id == 'none' %} sidebar-item__ring--empty{% endif %}" aria-hidden="true"></span>
+          <span class="sidebar-item__label">{{ pf.name }}</span>
+          <span class="sidebar-item__count">{{ pf.count }}</span>
         </a>
+        {% endif %}
         {% endfor %}
-        <a class="filter-pill filter-pill--muted" href="/admin/profiles">Управление…</a>
-      </div>
-    </div>
-    <div class="filter-bar__group">
-      <span class="filter-bar__label">Платформа</span>
-      <div class="filter-bar__pills">
-        {% for pl in platform_filters | default([]) %}
-        <a class="filter-pill{% if (filter_platform | default('all')) == pl.id %} filter-pill--active{% endif %}"
-          href="{{ admin_filter_href(filter_profile | default('all'), pl.id) }}">
-          {% if pl.color %}<span class="filter-pill__dot" style="background: {{ pl.color }}"></span>{% endif %}
-          {{ pl.label }}
+        <div class="links-sidebar__sep" role="separator"></div>
+        {% for pf in profile_filters | default([]) %}
+        {% if pf.id not in ['all', 'none'] %}
+        <a class="sidebar-item{% if (filter_profile | default('all')) == pf.id %} sidebar-item--active{% endif %}"
+          href="{{ admin_filter_href(pf.id, filter_platform | default('all')) }}"
+          data-profile-label="{{ pf.name | lower }}">
+          <span class="sidebar-item__avatar" style="--av-color: {{ pf.color }}">{{ pf.name[0] }}</span>
+          <span class="sidebar-item__label">{{ pf.name }}</span>
+          <span class="sidebar-item__count">{{ pf.count }}</span>
         </a>
+        {% endif %}
         {% endfor %}
-      </div>
-    </div>
-  </div>
+      </nav>
+    </aside>
 
-  {% if link_rows is defined and link_rows %}
-  <div class="table-wrap table-wrap--flush">
-    <table class="table table--wide">
-      <thead>
-        <tr>
-          <th>Slug</th>
-          <th>Профиль</th>
-          <th>Платф.</th>
-          <th>Аккаунт</th>
-          <th>Цель</th>
-          <th class="num">Всего</th>
-          <th class="num">Сегодня</th>
-          <th class="actions-head"><span class="sr-only">Действия</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in link_rows %}
-        <tr class="link-row" data-link-id="{{ row.link.id }}" data-stats-href="/admin/links/{{ row.link.id }}/stats" tabindex="0">
-          <td>
-            <button type="button" class="slug-pill slug-pill--copy js-copy-short-url"
-              data-short-url="{{ request.base_url.scheme }}://{{ request.base_url.netloc }}/r/{{ row.link.slug }}"
-              title="Нажмите, чтобы скопировать короткую ссылку"
-              aria-label="Скопировать ссылку /r/{{ row.link.slug }}">
-              <code>{{ row.link.slug }}</code>
-            </button>
-          </td>
-          <td class="truncate">
-            {% if row.link.profile %}
-            <span class="profile-pill profile-pill--sm" title="{{ row.link.profile.name }}">
-              <span class="profile-pill__dot" style="background: {{ row.link.profile.color }}"></span>
-              {{ row.link.profile.name }}
-            </span>
-            {% else %}—{% endif %}
-          </td>
-          <td>
-            {% if row.link.platform %}
-            <span class="platform-badge" title="{{ row.platform_label }}">
-              <span class="platform-badge__dot" style="background: {{ row.platform_color }}"></span>
-              <span class="platform-badge__label">{{ row.platform_label }}</span>
-            </span>
-            {% else %}—{% endif %}
-          </td>
-          <td class="truncate" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>{{ row.link.label or "—" }}</td>
-          <td class="truncate" title="{{ row.link.destination_url | e }}">{{ row.link.destination_url }}</td>
-          <td class="num"><span class="stat-pill js-dash-total">{{ row.total }}</span></td>
-          <td class="num"><span class="stat-pill stat-pill--accent js-dash-today">{{ row.today }}</span></td>
-          <td class="actions actions--icons">
-            <a class="icon-btn" href="/admin/links/{{ row.link.id }}/edit" title="Правка" aria-label="Правка">
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-            </a>
-            <form method="post" action="/admin/links/{{ row.link.id }}/delete" class="inline icon-btn-form"
-                  data-confirm-title="Удалить ссылку?"
-                  data-confirm-message="Будут удалены эта короткая ссылка и вся связанная статистика кликов. Восстановить данные будет нельзя."
-                  data-confirm-ok="Удалить">
-              <button type="submit" class="icon-btn icon-btn--danger" title="Удалить" aria-label="Удалить">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="empty-state">
-    <p class="empty-state__title">Пока нет ссылок</p>
-    <p class="muted">Создайте первую короткую ссылку для TikTok, Instagram и т.д.</p>
-    <div class="admin-actions admin-actions--center">
-      <button type="button" class="btn btn-primary js-open-new-link-modal">Создать ссылку</button>
-      <button type="button" class="btn js-open-bulk-link-modal">Массовое создание</button>
+    <div class="links-main">
+      <div class="platform-bar">
+        <div class="platform-bar__pills">
+          {% for pl in platform_filters | default([]) %}
+          <a class="platform-pill{% if (filter_platform | default('all')) == pl.id %} platform-pill--active{% endif %}"
+            href="{{ admin_filter_href(filter_profile | default('all'), pl.id) }}">
+            {% if pl.color %}<span class="platform-pill__dot" style="background: {{ pl.color }}"></span>{% endif %}
+            <span class="platform-pill__label">{{ pl.label }}</span>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if link_rows is defined and link_rows %}
+      <div class="table-wrap table-wrap--flush">
+        <table class="table table--wide">
+          <thead>
+            <tr>
+              <th>Slug</th>
+              <th>Профиль</th>
+              <th>Платф.</th>
+              <th>Аккаунт</th>
+              <th>Цель</th>
+              <th class="num">Всего</th>
+              <th class="num">Сегодня</th>
+              <th class="actions-head"><span class="sr-only">Действия</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in link_rows %}
+            <tr class="link-row" data-link-id="{{ row.link.id }}" data-stats-href="/admin/links/{{ row.link.id }}/stats" tabindex="0">
+              <td>
+                <button type="button" class="slug-pill slug-pill--copy js-copy-short-url"
+                  data-short-url="{{ request.base_url.scheme }}://{{ request.base_url.netloc }}/r/{{ row.link.slug }}"
+                  title="Нажмите, чтобы скопировать короткую ссылку"
+                  aria-label="Скопировать ссылку /r/{{ row.link.slug }}">
+                  <code>{{ row.link.slug }}</code>
+                </button>
+              </td>
+              <td class="truncate">
+                {% if row.link.profile %}
+                <span class="profile-pill profile-pill--sm" title="{{ row.link.profile.name }}">
+                  <span class="profile-pill__dot" style="background: {{ row.link.profile.color }}"></span>
+                  {{ row.link.profile.name }}
+                </span>
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                {% if row.link.platform %}
+                <span class="platform-badge" title="{{ row.platform_label }}">
+                  <span class="platform-badge__dot" style="background: {{ row.platform_color }}"></span>
+                  <span class="platform-badge__label">{{ row.platform_label }}</span>
+                </span>
+                {% else %}—{% endif %}
+              </td>
+              <td class="truncate" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>{{ row.link.label or "—" }}</td>
+              <td class="truncate" title="{{ row.link.destination_url | e }}">{{ row.link.destination_url }}</td>
+              <td class="num"><span class="stat-pill js-dash-total">{{ row.total }}</span></td>
+              <td class="num"><span class="stat-pill stat-pill--accent js-dash-today">{{ row.today }}</span></td>
+              <td class="actions actions--icons">
+                <a class="icon-btn" href="/admin/links/{{ row.link.id }}/edit" title="Правка" aria-label="Правка">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                </a>
+                <form method="post" action="/admin/links/{{ row.link.id }}/delete" class="inline icon-btn-form"
+                      data-confirm-title="Удалить ссылку?"
+                      data-confirm-message="Будут удалены эта короткая ссылка и вся связанная статистика кликов. Восстановить данные будет нельзя."
+                      data-confirm-ok="Удалить">
+                  <button type="submit" class="icon-btn icon-btn--danger" title="Удалить" aria-label="Удалить">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <p class="empty-state__title">Пока нет ссылок</p>
+        <p class="muted">Создайте первую короткую ссылку для TikTok, Instagram и т.д.</p>
+        <div class="admin-actions admin-actions--center">
+          <button type="button" class="btn btn-primary js-open-new-link-modal">Создать ссылку</button>
+          <button type="button" class="btn js-open-bulk-link-modal">Массовое создание</button>
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
-  {% endif %}
 </section>
 
 <div id="new-link-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="new-link-modal-title">
@@ -170,8 +194,20 @@
 
   function isActionTarget(el) {
     return el && el.closest && el.closest(
-      "a.icon-btn, button.icon-btn, form.icon-btn-form, .js-copy-short-url"
+      "a.icon-btn, button.icon-btn, form.icon-btn-form, .js-copy-short-url, .sidebar-item, .platform-pill"
     );
+  }
+
+  var profileSearch = document.getElementById("profile-search");
+  if (profileSearch) {
+    profileSearch.addEventListener("input", function () {
+      var q = profileSearch.value.trim().toLowerCase();
+      document.querySelectorAll(".sidebar-item[data-profile-label]").forEach(function (el) {
+        var label = el.getAttribute("data-profile-label") || "";
+        var show = !q || label.indexOf(q) !== -1;
+        el.style.display = show ? "" : "none";
+      });
+    });
   }
 
   function copyText(text, onOk, onErr) {
@@ -217,6 +253,7 @@
       });
     });
   });
+
   document.querySelectorAll("tr.link-row").forEach(function (tr) {
     tr.addEventListener("click", function (e) {
       if (isActionTarget(e.target)) return;

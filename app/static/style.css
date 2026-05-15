@@ -590,6 +590,226 @@ a:hover {
   font-size: 0.8rem;
 }
 
+/* Links dashboard layout (profile sidebar + platform pills) */
+.links-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  gap: 0;
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border-strong);
+}
+
+.links-sidebar {
+  border-right: 1px solid var(--border-strong);
+  padding: 1.25rem 1rem 1.5rem 0.25rem;
+  min-height: 12rem;
+}
+
+.links-sidebar__search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  margin-bottom: 0.875rem;
+}
+
+.links-sidebar__search-wrap {
+  position: relative;
+}
+
+.links-sidebar__search-icon {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.links-sidebar__search {
+  width: 100%;
+  padding: 0.55rem 0.75rem 0.55rem 1.85rem;
+  font-size: 0.8125rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.links-sidebar__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 1.25rem;
+  line-height: 1;
+  text-decoration: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.links-sidebar__add:hover {
+  background: rgba(129, 140, 248, 0.12);
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
+.links-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.links-sidebar__sep {
+  height: 1px;
+  background: var(--border-strong);
+  margin: 0.75rem 0;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sidebar-item--active {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.sidebar-item--dim {
+  color: var(--muted);
+}
+
+.sidebar-item__ring {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  flex-shrink: 0;
+}
+
+.sidebar-item--active .sidebar-item__ring {
+  border-color: var(--text-secondary);
+}
+
+.sidebar-item__ring--empty {
+  opacity: 0.45;
+}
+
+.sidebar-item__avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--av-color, #818cf8);
+  background: color-mix(in srgb, var(--av-color, #818cf8) 15%, transparent);
+}
+
+.sidebar-item__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-item__count {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.links-main {
+  min-width: 0;
+  padding: 1rem 0 0 1.25rem;
+}
+
+.platform-bar {
+  margin-bottom: 0.75rem;
+}
+
+.platform-bar__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.platform-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.platform-pill:hover {
+  background: rgba(129, 140, 248, 0.08);
+  border-color: rgba(129, 140, 248, 0.3);
+  color: var(--text);
+}
+
+.platform-pill--active {
+  background: #fff;
+  color: #0c1222;
+  border-color: #fff;
+  font-weight: 600;
+}
+
+.platform-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.platform-pill__label {
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .links-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .links-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border-strong);
+    padding: 1rem 0.25rem 1rem;
+  }
+
+  .links-main {
+    padding: 1rem 0.25rem 0;
+  }
+}
+
 .filter-bar {
   display: flex;
   flex-direction: column;

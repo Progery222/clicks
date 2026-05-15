@@ -156,7 +156,7 @@ async def dashboard(
     prof_counts = await profile_link_counts(db)
     plat_counts = await platform_link_counts(db)
     profile_filters = [
-        {"id": "all", "name": "Все", "color": None, "count": prof_counts.get("all", 0)},
+        {"id": "all", "name": "Все профили", "color": None, "count": prof_counts.get("all", 0)},
         {
             "id": "none",
             "name": "Без профиля",
