@@ -528,6 +528,63 @@ async def link_stats(
     )
 
 
+@router.get("/export/links.csv")
+async def export_links_csv(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    profile: str = Query("all"),
+    platform: str = Query("all"),
+) -> StreamingResponse:
+    """Список ссылок (с учётом фильтров профиля/платформы) и счётчики кликов."""
+    _require_admin(request)
+    stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
+    stmt = apply_link_filters(stmt, profile=profile, platform=platform)
+    links = list((await db.execute(stmt)).scalars().all())
+    try:
+        counts = await dashboard_click_counts(db)
+    except Exception:
+        log.exception("export_links_csv: dashboard_click_counts failed")
+        counts = {}
+    base = str(request.base_url).rstrip("/")
+
+    def row_iter() -> Iterator[list[object]]:
+        for link in links:
+            total, today = counts.get(link.id, (0, 0))
+            yield [
+                str(link.id),
+                link.slug,
+                f"{base}/r/{link.slug}",
+                link.profile.name if link.profile else "",
+                platform_label(link.platform) if link.platform else "",
+                link.platform or "",
+                link.label or "",
+                link.destination_url,
+                total,
+                today,
+                link.created_at.isoformat() if link.created_at else "",
+            ]
+
+    header = [
+        "id",
+        "slug",
+        "short_url",
+        "profile",
+        "platform_label",
+        "platform",
+        "account",
+        "destination_url",
+        "clicks_total",
+        "clicks_today",
+        "created_at",
+    ]
+    name = "links.csv"
+    return StreamingResponse(
+        stream_csv(row_iter(), header),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{quote(name)}"'},
+    )
+
+
 @router.get("/export/clicks.csv")
 async def export_clicks_csv(
     request: Request,
