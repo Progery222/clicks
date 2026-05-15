@@ -530,6 +530,39 @@ a:hover {
   display: none !important;
 }
 
+.new-link-modal__hint {
+  margin: -0.35rem 0 1rem;
+  line-height: 1.45;
+}
+
+.new-link-modal__panel--wide {
+  max-width: 36rem;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.admin-actions--center {
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+
+.input--textarea {
+  display: block;
+  width: 100%;
+  min-height: 11rem;
+  max-height: 50vh;
+  resize: vertical;
+  line-height: 1.45;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .new-link-modal,
   .new-link-modal__panel {

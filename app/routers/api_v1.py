@@ -28,6 +28,7 @@ from app.services.stats import (
     top_countries,
 )
 from app.stats_range import active_preset, form_period_dates, parse_range, stats_range
+from app.utils.bulk_labels import MAX_BULK_LABELS, normalize_bulk_labels
 from app.utils.slug import random_slug
 
 log = logging.getLogger(__name__)
@@ -88,6 +89,21 @@ async def _unique_slug(db: AsyncSession) -> str:
 class LinkCreate(BaseModel):
     destination_url: str
     label: str | None = None
+
+
+class LinkBulkCreate(BaseModel):
+    """Одна целевая ссылка и несколько меток — по одной короткой ссылке на метку."""
+
+    destination_url: str
+    labels: list[str] | None = None
+    labels_text: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LinksBulkOut(BaseModel):
+    created: int
+    items: list["LinkOut"]
 
 
 class LinkPatch(BaseModel):
@@ -218,6 +234,53 @@ async def create_link(_: ApiTokenDep, db: DbDep, body: LinkCreate) -> LinkOut:
     await db.commit()
     await db.refresh(link)
     return LinkOut.from_link(link)
+
+
+def _resolve_bulk_labels(body: LinkBulkCreate) -> list[str]:
+    raw: list[str] = []
+    if body.labels:
+        raw.extend(body.labels)
+    if body.labels_text:
+        raw.extend(body.labels_text.splitlines())
+    if not body.labels and not body.labels_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide labels (array) or labels_text (multiline string)",
+        )
+    label_list = normalize_bulk_labels(raw)
+    if not label_list:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one non-empty label is required",
+        )
+    if len(label_list) > MAX_BULK_LABELS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"At most {MAX_BULK_LABELS} labels per request",
+        )
+    return label_list
+
+
+@router.post("/links/bulk", response_model=LinksBulkOut, status_code=status.HTTP_201_CREATED)
+async def create_links_bulk(_: ApiTokenDep, db: DbDep, body: LinkBulkCreate) -> LinksBulkOut:
+    if not _valid_url(body.destination_url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL must start with http:// or https://",
+        )
+    label_list = _resolve_bulk_labels(body)
+    dest_url = body.destination_url.strip()
+    created_links: list[Link] = []
+    for label in label_list:
+        slug = await _unique_slug(db)
+        link = Link(slug=slug, destination_url=dest_url, label=label)
+        db.add(link)
+        created_links.append(link)
+    await db.commit()
+    for link in created_links:
+        await db.refresh(link)
+    items = [LinkOut.from_link(link) for link in created_links]
+    return LinksBulkOut(created=len(items), items=items)
 
 
 @router.get("/links/{link_id}", response_model=LinkOut)

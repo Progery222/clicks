@@ -32,6 +32,7 @@ from app.services.stats import (
     top_countries,
 )
 from app.stats_range import active_preset, form_period_dates, parse_range, stats_range
+from app.utils.bulk_labels import MAX_BULK_LABELS, parse_label_lines
 from app.utils.slug import random_slug
 
 log = logging.getLogger(__name__)
@@ -200,6 +201,45 @@ async def link_new_post(
     if modal:
         return JSONResponse({"redirect": dest})
     return RedirectResponse(dest, status_code=302)
+
+
+@router.post("/links/bulk")
+async def link_bulk_post(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    destination_url: str = Form(...),
+    labels: str = Form(...),
+):
+    _require_admin(request)
+    modal = (request.headers.get("x-modal-form") or "").strip() == "1"
+
+    if not _valid_url(destination_url):
+        msg = "URL должен начинаться с http:// или https://"
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
+        raise HTTPException(status_code=400, detail=msg)
+
+    label_list = parse_label_lines(labels)
+    if not label_list:
+        msg = "Добавьте хотя бы одну метку (по одной на строку)."
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
+        raise HTTPException(status_code=400, detail=msg)
+    if len(label_list) > MAX_BULK_LABELS:
+        msg = f"Не больше {MAX_BULK_LABELS} меток за раз."
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
+        raise HTTPException(status_code=400, detail=msg)
+
+    dest_url = destination_url.strip()
+    for label in label_list:
+        slug = await _unique_slug(db)
+        db.add(Link(slug=slug, destination_url=dest_url, label=label))
+    await db.commit()
+
+    if modal:
+        return JSONResponse({"redirect": "/admin", "created": len(label_list)})
+    return RedirectResponse("/admin", status_code=302)
 
 
 @router.get("/links/{link_id}/edit", response_class=HTMLResponse)

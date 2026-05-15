@@ -7,7 +7,10 @@
       <h1 class="page-title">Короткие ссылки</h1>
       <p class="muted small">«Всего» — за всё время. «Сегодня» — календарные сутки <strong>UTC</strong>.</p>
     </div>
-    <button type="button" class="btn btn-primary js-open-new-link-modal">+ Создать ссылку</button>
+    <div class="admin-actions">
+      <button type="button" class="btn btn-primary js-open-new-link-modal">+ Создать ссылку</button>
+      <button type="button" class="btn js-open-bulk-link-modal">Массовое создание</button>
+    </div>
   </div>
   {% if link_rows is defined and link_rows %}
   <div class="table-wrap table-wrap--flush">
@@ -52,7 +55,10 @@
   <div class="empty-state">
     <p class="empty-state__title">Пока нет ссылок</p>
     <p class="muted">Создайте первую короткую ссылку для TikTok, Instagram и т.д.</p>
-    <button type="button" class="btn btn-primary js-open-new-link-modal">Создать ссылку</button>
+    <div class="admin-actions admin-actions--center">
+      <button type="button" class="btn btn-primary js-open-new-link-modal">Создать ссылку</button>
+      <button type="button" class="btn js-open-bulk-link-modal">Массовое создание</button>
+    </div>
   </div>
   {% endif %}
 </section>
@@ -75,6 +81,29 @@
           placeholder="TikTok @user">
       </label>
       <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
+    </form>
+  </div>
+</div>
+
+<div id="bulk-link-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="bulk-link-modal-title">
+  <div class="new-link-modal__backdrop" data-bulk-link-dismiss tabindex="-1"></div>
+  <div class="new-link-modal__panel new-link-modal__panel--wide">
+    <div class="new-link-modal__head">
+      <h2 id="bulk-link-modal-title" class="new-link-modal__title">Массовое создание</h2>
+      <button type="button" class="new-link-modal__close" data-bulk-link-dismiss aria-label="Закрыть">×</button>
+    </div>
+    <p class="muted small new-link-modal__hint">Одна целевая ссылка и список меток — по одной на строку. Для каждой метки создаётся отдельная короткая ссылка.</p>
+    <p id="bulk-link-modal-error" class="new-link-modal__error error error--box" hidden></p>
+    <form id="bulk-link-form" method="post" action="/admin/links/bulk" class="stack">
+      <label class="field-label">Целевой URL
+        <input class="input" type="url" name="destination_url" required autocomplete="url"
+          placeholder="https://rumble.com/c/...">
+      </label>
+      <label class="field-label">Метки (по одной на строку)
+        <textarea class="input input--textarea" name="labels" required rows="12" spellcheck="false"
+          placeholder="https://www.tiktok.com/@user&#10;http://tiktok.com/@other"></textarea>
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">Создать ссылки</button>
     </form>
   </div>
 </div>
@@ -106,70 +135,116 @@
     });
   });
 
-  var modal = document.getElementById("new-link-modal");
-  var form = document.getElementById("new-link-form");
-  var errEl = document.getElementById("new-link-modal-error");
-  if (!modal || !form) return;
+  function wireModal(opts) {
+    var modal = document.getElementById(opts.id);
+    var form = document.getElementById(opts.formId);
+    var errEl = document.getElementById(opts.errorId);
+    if (!modal || !form || !errEl) return null;
 
-  function setOpen(open) {
-    modal.classList.toggle("is-open", open);
-    modal.setAttribute("aria-hidden", open ? "false" : "true");
-    document.body.style.overflow = open ? "hidden" : "";
-    if (!open) {
-      form.reset();
-      errEl.textContent = "";
-      errEl.hidden = true;
-    } else {
-      var first = form.querySelector("input[name=destination_url]");
-      if (first) window.setTimeout(function () { first.focus(); }, 50);
+    function setOpen(open) {
+      modal.classList.toggle("is-open", open);
+      modal.setAttribute("aria-hidden", open ? "false" : "true");
+      var anyOpen = document.querySelector(".new-link-modal.is-open");
+      document.body.style.overflow = anyOpen ? "hidden" : "";
+      if (!open) {
+        form.reset();
+        errEl.textContent = "";
+        errEl.hidden = true;
+        if (opts.submitBtn) opts.submitBtn.disabled = false;
+      } else {
+        var first = form.querySelector(opts.focusSelector || "input, textarea");
+        if (first) window.setTimeout(function () { first.focus(); }, 50);
+      }
     }
+
+    document.querySelectorAll(opts.openSelector).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".new-link-modal.is-open").forEach(function (m) {
+          if (m !== modal) {
+            m.classList.remove("is-open");
+            m.setAttribute("aria-hidden", "true");
+          }
+        });
+        setOpen(true);
+      });
+    });
+    modal.querySelectorAll(opts.dismissAttr).forEach(function (el) {
+      el.addEventListener("click", function () { setOpen(false); });
+    });
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      errEl.hidden = true;
+      errEl.textContent = "";
+      if (opts.submitBtn) opts.submitBtn.disabled = true;
+      var fd = new FormData(form);
+      fetch(form.action, {
+        method: "POST",
+        body: fd,
+        headers: { "X-Modal-Form": "1", "Accept": "application/json" },
+        credentials: "same-origin",
+      })
+        .then(function (res) { return res.json().then(function (data) { return { res: res, data: data }; }); })
+        .then(function (_ref) {
+          var res = _ref.res;
+          var data = _ref.data;
+          if (res.ok && data.redirect) {
+            window.location.href = data.redirect;
+            return;
+          }
+          if (opts.submitBtn) opts.submitBtn.disabled = false;
+          errEl.textContent = (data && data.error) ? data.error : (opts.failMsg || "Не удалось сохранить.");
+          errEl.hidden = false;
+        })
+        .catch(function () {
+          if (opts.submitBtn) opts.submitBtn.disabled = false;
+          errEl.textContent = "Ошибка сети. Попробуйте ещё раз.";
+          errEl.hidden = false;
+        });
+    });
+
+    return { setOpen: setOpen, modal: modal };
   }
 
-  document.querySelectorAll(".js-open-new-link-modal").forEach(function (btn) {
-    btn.addEventListener("click", function () { setOpen(true); });
+  var newLink = wireModal({
+    id: "new-link-modal",
+    formId: "new-link-form",
+    errorId: "new-link-modal-error",
+    openSelector: ".js-open-new-link-modal",
+    dismissAttr: "[data-new-link-dismiss]",
   });
-  modal.querySelectorAll("[data-new-link-dismiss]").forEach(function (el) {
-    el.addEventListener("click", function () { setOpen(false); });
+  var bulkForm = document.getElementById("bulk-link-form");
+  var bulkSubmit = bulkForm ? bulkForm.querySelector('button[type="submit"]') : null;
+  wireModal({
+    id: "bulk-link-modal",
+    formId: "bulk-link-form",
+    errorId: "bulk-link-modal-error",
+    openSelector: ".js-open-bulk-link-modal",
+    dismissAttr: "[data-bulk-link-dismiss]",
+    focusSelector: "textarea[name=labels], input[name=destination_url]",
+    submitBtn: bulkSubmit,
+    failMsg: "Не удалось создать ссылки.",
   });
+
   document.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape" || !modal.classList.contains("is-open")) return;
+    if (e.key !== "Escape") return;
+    var openModal = document.querySelector(".new-link-modal.is-open");
+    if (!openModal) return;
     e.preventDefault();
-    setOpen(false);
+    openModal.classList.remove("is-open");
+    openModal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    var f = openModal.querySelector("form");
+    if (f) f.reset();
+    var err = openModal.querySelector(".new-link-modal__error");
+    if (err) { err.textContent = ""; err.hidden = true; }
   }, true);
 
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    errEl.hidden = true;
-    errEl.textContent = "";
-    var fd = new FormData(form);
-    fetch(form.action, {
-      method: "POST",
-      body: fd,
-      headers: { "X-Modal-Form": "1", "Accept": "application/json" },
-      credentials: "same-origin",
-    })
-      .then(function (res) { return res.json().then(function (data) { return { res: res, data: data }; }); })
-      .then(function (_ref) {
-        var res = _ref.res;
-        var data = _ref.data;
-        if (res.ok && data.redirect) {
-          window.location.href = data.redirect;
-          return;
-        }
-        errEl.textContent = (data && data.error) ? data.error : "Не удалось сохранить.";
-        errEl.hidden = false;
-      })
-      .catch(function () {
-        errEl.textContent = "Ошибка сети. Попробуйте ещё раз.";
-        errEl.hidden = false;
-      });
-  });
-
-  if (autoOpen) {
+  if (autoOpen && newLink) {
     if (window.history && window.history.replaceState) {
       window.history.replaceState({}, "", window.location.pathname);
     }
-    setOpen(true);
+    newLink.setOpen(true);
   }
 
   var POLL_MS = 12000;

@@ -115,6 +115,49 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" "https://example.com/api/v1/me"
 
 ---
 
+### `POST /api/v1/links/bulk`
+
+Массовое создание: **одна** целевая ссылка и **несколько меток** — для каждой метки создаётся отдельная короткая ссылка (как «Массовое создание» в админке).
+
+**Тело JSON** — укажите **`labels`** (массив строк) **или** **`labels_text`** (многострочная строка, по одной метке на строку), можно не передавать оба сразу:
+
+```json
+{
+  "destination_url": "https://rumble.com/c/PhilGodlewski",
+  "labels": [
+    "https://www.tiktok.com/@thecapitolverdict",
+    "http://tiktok.com/@sovereigndesk"
+  ]
+}
+```
+
+Альтернатива с текстовым полем:
+
+```json
+{
+  "destination_url": "https://rumble.com/c/PhilGodlewski",
+  "labels_text": "https://www.tiktok.com/@user1\nhttp://tiktok.com/@user2"
+}
+```
+
+- Пустые строки пропускаются.
+- Одинаковые метки (без учёта регистра) объединяются в одну ссылку.
+- Не больше **200** меток за запрос.
+- **`destination_url`** — только `http://` или `https://`.
+
+**Ответ `201`:**
+
+```json
+{
+  "created": 2,
+  "items": [ { "...": "объект ссылки как в POST /links" } ]
+}
+```
+
+**Ошибки `400`:** неверный URL, нет меток, слишком много меток, не переданы ни `labels`, ни `labels_text`.
+
+---
+
 ### `GET /api/v1/links/{link_id}`
 
 Одна ссылка по UUID. **`404`**, если не найдена.
@@ -244,10 +287,15 @@ export API_TOKEN="ваш-секрет"
 curl -sS -H "Authorization: Bearer $API_TOKEN" \
   "$BASE/api/v1/links?limit=20&offset=0"
 
-# Создание
+# Создание одной ссылки
 curl -sS -X POST -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
   -d '{"destination_url":"https://example.com","label":"Тест"}' \
   "$BASE/api/v1/links"
+
+# Массовое создание
+curl -sS -X POST -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"destination_url":"https://rumble.com/c/example","labels":["https://www.tiktok.com/@user1","http://tiktok.com/@user2"]}' \
+  "$BASE/api/v1/links/bulk"
 
 # Статистика за неделю (пресет)
 curl -sS -H "X-Api-Key: $API_TOKEN" \
