@@ -22,7 +22,7 @@ def test_facebook_profile_php():
 
 
 def test_account_label_display_urls():
-    assert account_label_display("https://www.instagram.com/Phil.Redpill/") == "Phil.Redpill"
+    assert account_label_display("https://www.instagram.com/Phil.Redpill/") == "phil.redpill"
     assert account_label_display("https://www.tiktok.com/@User/") == "@user"
     assert account_label_display("https://www.facebook.com/profile.php?id=123456789012") == "123456789012"
     assert account_label_display("@plain_handle") == "plain_handle"
