@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Click
+from app.models import Click, Link, Link
 
 
 async def stats_summary(
@@ -119,3 +119,157 @@ async def dashboard_click_counts(session: AsyncSession) -> dict[uuid.UUID, tuple
         else:
             out[lid] = (0, n)
     return out
+
+
+async def click_counts_for_links_period(
+    session: AsyncSession,
+    link_ids: list[uuid.UUID],
+    start: datetime,
+    end: datetime,
+) -> dict[uuid.UUID, tuple[int, int]]:
+    """По каждой ссылке: (клики за период, уникальные за период)."""
+    if not link_ids:
+        return {}
+    where = [Click.link_id.in_(link_ids), Click.created_at >= start, Click.created_at < end]
+    totals = (
+        await session.execute(
+            select(Click.link_id, func.count()).where(*where).group_by(Click.link_id)
+        )
+    ).all()
+    uniqs = (
+        await session.execute(
+            select(Click.link_id, func.count(func.distinct(Click.dedupe_key)))
+            .where(*where)
+            .group_by(Click.link_id)
+        )
+    ).all()
+    out: dict[uuid.UUID, tuple[int, int]] = {}
+    for lid_raw, cnt in totals:
+        lid = lid_raw if isinstance(lid_raw, uuid.UUID) else uuid.UUID(str(lid_raw))
+        out[lid] = (int(cnt), 0)
+    for lid_raw, cnt in uniqs:
+        lid = lid_raw if isinstance(lid_raw, uuid.UUID) else uuid.UUID(str(lid_raw))
+        n = int(cnt)
+        if lid in out:
+            out[lid] = (out[lid][0], n)
+        else:
+            out[lid] = (0, n)
+    return out
+
+
+async def aggregate_clicks_for_links(
+    session: AsyncSession,
+    link_ids: list[uuid.UUID],
+    start: datetime,
+    end: datetime,
+) -> tuple[int, int]:
+    if not link_ids:
+        return 0, 0
+    where = [Click.link_id.in_(link_ids), Click.created_at >= start, Click.created_at < end]
+    total = int(
+        (await session.execute(select(func.count()).select_from(Click).where(*where))).scalar_one()
+    )
+    uniq = int(
+        (
+            await session.execute(
+                select(func.count(func.distinct(Click.dedupe_key))).select_from(Click).where(*where)
+            )
+        ).scalar_one()
+    )
+    return total, uniq
+
+
+async def platform_click_stats(
+    session: AsyncSession,
+    link_ids: list[uuid.UUID],
+    start: datetime,
+    end: datetime,
+) -> list[dict]:
+    if not link_ids:
+        return []
+    plat = Link.platform.label("platform")
+    stmt = (
+        select(
+            plat,
+            func.count().label("clicks"),
+            func.count(func.distinct(Click.dedupe_key)).label("uniques"),
+        )
+        .select_from(Click)
+        .join(Link, Click.link_id == Link.id)
+        .where(
+            Click.link_id.in_(link_ids),
+            Click.created_at >= start,
+            Click.created_at < end,
+        )
+        .group_by(plat)
+        .order_by(func.count().desc())
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        {"platform": r.platform or "none", "clicks": int(r.clicks), "uniques": int(r.uniques)}
+        for r in rows
+    ]
+
+
+def _referer_label(raw: str | None) -> str:
+    if not raw or not raw.strip():
+        return "(прямой / без referer)"
+    s = raw.strip().replace("\n", " ")
+    return s[:117] + "..." if len(s) > 120 else s
+
+
+def _ua_label(raw: str | None) -> str:
+    if not raw or not raw.strip():
+        return "(не указан)"
+    s = raw.strip().replace("\n", " ")
+    return s[:97] + "..." if len(s) > 100 else s
+
+
+async def top_referers(
+    session: AsyncSession,
+    link_ids: list[uuid.UUID],
+    start: datetime,
+    end: datetime,
+    limit: int = 10,
+) -> list[tuple[str, int]]:
+    if not link_ids:
+        return []
+    rows = (
+        await session.execute(
+            select(Click.referer, func.count().label("c"))
+            .where(
+                Click.link_id.in_(link_ids),
+                Click.created_at >= start,
+                Click.created_at < end,
+            )
+            .group_by(Click.referer)
+            .order_by(func.count().desc())
+            .limit(limit)
+        )
+    ).all()
+    return [(_referer_label(r[0]), int(r[1])) for r in rows]
+
+
+async def top_user_agents(
+    session: AsyncSession,
+    link_ids: list[uuid.UUID],
+    start: datetime,
+    end: datetime,
+    limit: int = 10,
+) -> list[tuple[str, int]]:
+    if not link_ids:
+        return []
+    rows = (
+        await session.execute(
+            select(Click.user_agent, func.count().label("c"))
+            .where(
+                Click.link_id.in_(link_ids),
+                Click.created_at >= start,
+                Click.created_at < end,
+            )
+            .group_by(Click.user_agent)
+            .order_by(func.count().desc())
+            .limit(limit)
+        )
+    ).all()
+    return [(_ua_label(r[0]), int(r[1])) for r in rows]

@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     session_max_age_seconds: int = 14 * 24 * 60 * 60
     session_cookie_https_only: bool = False
 
+    # 0 = без лимита; иначе макс. переходов /r/ с одного IP в минуту
+    redirect_rate_limit_per_minute: int = 120
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -5,12 +5,14 @@
   <div class="row between wrap">
     <div>
       <h1 class="page-title">Короткие ссылки</h1>
-      <p class="muted small">«Всего» — за всё время. «Сегодня» — календарные сутки <strong>UTC</strong>.</p>
+      <p class="muted small">«Всего» / «Сегодня» — за всё время и сутки <strong>UTC</strong>. «За период» — по фильтру ниже.</p>
     </div>
     <div class="admin-actions">
       <button type="button" class="btn btn-primary js-open-new-link-modal">+ Создать ссылку</button>
       <button type="button" class="btn js-open-bulk-link-modal">Массовое создание</button>
-      <a class="btn" href="/admin/export/links.csv{{ filter_qs | default('') }}">Скачать CSV</a>
+      <button type="button" class="btn js-open-import-csv-modal">Импорт CSV</button>
+      <a class="btn" href="/admin/export/links.csv{{ filter_qs | default('') }}">Ссылки CSV</a>
+      <a class="btn" href="/admin/export/clicks.csv{{ filter_qs | default('') }}">Клики CSV</a>
     </div>
   </div>
 
@@ -81,6 +83,77 @@
         </div>
       </div>
 
+      <div class="dash-period">
+        <div class="dash-period__pills" role="group" aria-label="Период">
+          <a class="platform-pill{% if active_preset == 'today' %} platform-pill--active{% endif %}"
+            href="{{ period_hrefs.today }}">Сегодня</a>
+          <a class="platform-pill{% if active_preset == 'week' %} platform-pill--active{% endif %}"
+            href="{{ period_hrefs.week }}">Неделя</a>
+          <a class="platform-pill{% if active_preset == 'all' %} platform-pill--active{% endif %}"
+            href="{{ period_hrefs.all }}">Всё время</a>
+        </div>
+        <form method="get" class="dash-period__custom row wrap gap">
+          <input type="hidden" name="profile" value="{{ filter_profile | default('all') }}">
+          <input type="hidden" name="platform" value="{{ filter_platform | default('all') }}">
+          <label class="field-label field-label--inline">С
+            <input class="input input--date" type="date" name="from" value="{{ period_from }}">
+          </label>
+          <label class="field-label field-label--inline">По
+            <input class="input input--date" type="date" name="to" value="{{ period_to }}">
+          </label>
+          <button type="submit" class="btn btn-primary btn-sm">Период</button>
+        </form>
+      </div>
+
+      <div class="kpi-grid kpi-grid--dash">
+        <div class="kpi-card">
+          <span class="kpi-card__num">{{ period_total | default(0) }}</span>
+          <span class="kpi-card__lbl">кликов за период</span>
+          <span class="kpi-card__hint muted small">{{ period_label | default('') }}</span>
+        </div>
+        <div class="kpi-card kpi-card--accent">
+          <span class="kpi-card__num">{{ period_uniques | default(0) }}</span>
+          <span class="kpi-card__lbl">уникальных</span>
+        </div>
+      </div>
+
+      {% if platform_stats %}
+      <h2 class="section-title section-title--sm">Платформы за период</h2>
+      <div class="table-wrap table-wrap--compact dash-insights">
+        <table class="table">
+          <thead><tr><th>Платформа</th><th class="num">Клики</th><th class="num">Уник.</th></tr></thead>
+          <tbody>
+            {% for ps in platform_stats %}
+            <tr>
+              <td><span class="platform-badge"><span class="platform-badge__dot" style="background: {{ ps.color }}"></span>{{ ps.label }}</span></td>
+              <td class="num">{{ ps.clicks }}</td>
+              <td class="num">{{ ps.uniques }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      <div class="dash-split">
+        <div>
+          <h2 class="section-title section-title--sm">Referer</h2>
+          {% if top_referers %}
+          <ul class="dash-rank">
+            {% for label, cnt in top_referers %}<li><span class="dash-rank__label">{{ label }}</span><span class="dash-rank__cnt">{{ cnt }}</span></li>{% endfor %}
+          </ul>
+          {% else %}<p class="muted small">Нет данных</p>{% endif %}
+        </div>
+        <div>
+          <h2 class="section-title section-title--sm">User-Agent</h2>
+          {% if top_user_agents %}
+          <ul class="dash-rank">
+            {% for label, cnt in top_user_agents %}<li><span class="dash-rank__label" title="{{ label }}">{{ label }}</span><span class="dash-rank__cnt">{{ cnt }}</span></li>{% endfor %}
+          </ul>
+          {% else %}<p class="muted small">Нет данных</p>{% endif %}
+        </div>
+      </div>
+
       {% if link_rows is defined and link_rows %}
       <div class="table-wrap table-wrap--flush">
         <table class="table table--wide">
@@ -93,6 +166,7 @@
               <th>Цель</th>
               <th class="num">Всего</th>
               <th class="num">Сегодня</th>
+              <th class="num">За период</th>
               <th class="actions-head"><span class="sr-only">Действия</span></th>
             </tr>
           </thead>
@@ -127,6 +201,7 @@
               <td class="truncate" title="{{ row.link.destination_url | e }}">{{ row.link.destination_url }}</td>
               <td class="num"><span class="stat-pill js-dash-total">{{ row.total }}</span></td>
               <td class="num"><span class="stat-pill stat-pill--accent js-dash-today">{{ row.today }}</span></td>
+              <td class="num"><span class="stat-pill js-dash-period">{{ row.period_clicks | default(0) }}</span></td>
               <td class="actions actions--icons">
                 <a class="icon-btn" href="/admin/links/{{ row.link.id }}/edit" title="Правка" aria-label="Правка">
                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
@@ -212,6 +287,25 @@
           placeholder="https://www.tiktok.com/@user&#10;http://tiktok.com/@other"></textarea>
       </label>
       <button type="submit" class="btn btn-primary btn-block">Создать ссылки</button>
+    </form>
+  </div>
+</div>
+
+<div id="import-csv-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="import-csv-modal-title">
+  <div class="new-link-modal__backdrop" data-import-csv-dismiss tabindex="-1"></div>
+  <div class="new-link-modal__panel">
+    <div class="new-link-modal__head">
+      <h2 id="import-csv-modal-title" class="new-link-modal__title">Импорт из CSV</h2>
+      <button type="button" class="new-link-modal__close" data-import-csv-dismiss aria-label="Закрыть">×</button>
+    </div>
+    <p class="muted small new-link-modal__hint">Колонки: <code>destination_url</code> (или <code>url</code>), необязательно <code>account</code> / <code>label</code>. UTF-8.</p>
+    <p id="import-csv-modal-error" class="new-link-modal__error error error--box" hidden></p>
+    <form id="import-csv-form" method="post" action="/admin/links/import-csv" enctype="multipart/form-data" class="stack">
+      {% include "_profile_select.html" %}
+      <label class="field-label">Файл CSV
+        <input class="input" type="file" name="file" accept=".csv,text/csv" required>
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">Импортировать</button>
     </form>
   </div>
 </div>
@@ -461,6 +555,18 @@
     submitBtn: bulkSubmit,
     failMsg: "Не удалось создать ссылки.",
   });
+  var importForm = document.getElementById("import-csv-form");
+  var importSubmit = importForm ? importForm.querySelector('button[type="submit"]') : null;
+  wireModal({
+    id: "import-csv-modal",
+    formId: "import-csv-form",
+    errorId: "import-csv-modal-error",
+    openSelector: ".js-open-import-csv-modal",
+    dismissAttr: "[data-import-csv-dismiss]",
+    focusSelector: "input[type=file]",
+    submitBtn: importSubmit,
+    failMsg: "Не удалось импортировать CSV.",
+  });
 
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
@@ -488,7 +594,8 @@
     if (document.hidden) return;
     var rows = document.querySelectorAll("tr.link-row[data-link-id]");
     if (!rows.length) return;
-    fetch("/admin/api/link-counts", { credentials: "same-origin" })
+    var qs = window.location.search || "";
+    fetch("/admin/api/link-counts" + qs, { credentials: "same-origin" })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var map = (data && data.counts) ? data.counts : {};
@@ -498,8 +605,10 @@
           if (!c) return;
           var t = tr.querySelector(".js-dash-total");
           var day = tr.querySelector(".js-dash-today");
+          var per = tr.querySelector(".js-dash-period");
           if (t) t.textContent = String(c.total);
           if (day) day.textContent = String(c.today);
+          if (per) per.textContent = String(c.period != null ? c.period : 0);
         });
       })
       .catch(function () {});

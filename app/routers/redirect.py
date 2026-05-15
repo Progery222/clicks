@@ -6,9 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
 
+from app.config import get_settings
 from app.database import get_db
 from app.models import Link
 from app.request_utils import get_client_ip
+from app.services.redirect_rate_limit import allow_redirect
 from app.services.clicks import log_click_background
 from app.services.dedupe import parse_vid_cookie
 
@@ -29,6 +31,13 @@ async def redirect_slug(
         raise HTTPException(status_code=404, detail="Not found")
 
     ip = get_client_ip(request) or None
+    settings = get_settings()
+    if not allow_redirect(ip, limit_per_minute=settings.redirect_rate_limit_per_minute):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests",
+            headers={"Retry-After": "60"},
+        )
     ua = request.headers.get("user-agent")
     ref = request.headers.get("referer")
 

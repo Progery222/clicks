@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, func, select
@@ -18,7 +18,12 @@ from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.csv_stream import stream_csv
-from app.admin_helpers import apply_link_filters
+from app.admin_helpers import (
+    apply_click_link_filters,
+    apply_link_filters,
+    earliest_link_created_at,
+    resolve_stats_period,
+)
 from app.database import get_db
 from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_label
@@ -33,6 +38,7 @@ from app.services.stats import (
 )
 from app.stats_range import active_preset, form_period_dates, parse_range, stats_range
 from app.utils.bulk_labels import MAX_BULK_LABELS, normalize_bulk_labels
+from app.utils.csv_import import parse_links_import_csv
 from app.utils.slug import random_slug
 
 log = logging.getLogger(__name__)
@@ -287,6 +293,45 @@ async def get_profile(profile_id: uuid.UUID, _: ApiTokenDep, db: DbDep) -> Profi
     p = await db.get(Profile, profile_id)
     if p is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    cnt = int(
+        (
+            await db.execute(
+                select(func.count()).select_from(Link).where(Link.profile_id == profile_id)
+            )
+        ).scalar_one()
+    )
+    return ProfileOut(
+        id=p.id,
+        name=p.name,
+        color=p.color,
+        link_count=cnt,
+        created_at=p.created_at.isoformat() if p.created_at else "",
+        updated_at=p.updated_at.isoformat() if p.updated_at else "",
+    )
+
+
+@router.patch("/profiles/{profile_id}", response_model=ProfileOut)
+async def patch_profile(
+    profile_id: uuid.UUID,
+    _: ApiTokenDep,
+    db: DbDep,
+    body: ProfilePatch,
+) -> ProfileOut:
+    p = await db.get(Profile, profile_id)
+    if p is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Name cannot be empty")
+        p.name = name
+    if body.color is not None:
+        c = body.color.strip()
+        if not c.startswith("#"):
+            c = "#6366f1"
+        p.color = c[:7]
+    await db.commit()
+    await db.refresh(p)
     cnt = int(
         (
             await db.execute(
@@ -580,18 +625,63 @@ async def clear_clicks(link_id: uuid.UUID, _: ApiTokenDep, db: DbDep) -> Respons
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/links/import-csv", status_code=status.HTTP_201_CREATED)
+async def import_links_csv(
+    _: ApiTokenDep,
+    db: DbDep,
+    file: UploadFile = File(...),
+    profile_id: uuid.UUID | None = Query(None),
+) -> dict[str, object]:
+    pid = await _ensure_profile(db, profile_id)
+    try:
+        raw = (await file.read()).decode("utf-8-sig")
+        rows = parse_links_import_csv(raw)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except UnicodeDecodeError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="UTF-8 required") from e
+    created_links: list[Link] = []
+    for row in rows:
+        if not _valid_url(row.destination_url):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid URL: {row.destination_url[:80]}",
+            )
+        slug = await _unique_slug(db)
+        link = Link(slug=slug, destination_url=row.destination_url.strip())
+        apply_link_label(link, row.label)
+        apply_link_profile(link, pid)
+        db.add(link)
+        created_links.append(link)
+    await db.commit()
+    for link in created_links:
+        await db.refresh(link)
+    return {
+        "created": len(created_links),
+        "items": [LinkOut.from_link(link) for link in created_links],
+    }
+
+
 @router.get("/export/clicks.csv")
 async def export_clicks_csv(
     _: ApiTokenDep,
     db: DbDep,
     link_id: uuid.UUID | None = Query(None),
+    profile_id: str | None = Query(None, description="UUID, none, or omit for all"),
+    platform: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
+    preset: str | None = Query(None),
 ) -> StreamingResponse:
-    start, end = parse_range(date_from, date_to)
+    earliest = await earliest_link_created_at(db)
+    start, end = resolve_stats_period(date_from, date_to, preset, earliest=earliest)
     stmt = select(Click).where(Click.created_at >= start, Click.created_at < end)
     if link_id is not None:
         stmt = stmt.where(Click.link_id == link_id)
+    else:
+        prof = profile_id if profile_id else "all"
+        plat = platform if platform else "all"
+        stmt = apply_click_link_filters(stmt, profile=prof, platform=plat)
     stmt = stmt.order_by(Click.created_at)
     res = await db.execute(stmt)
     rows = res.scalars().all()
@@ -638,10 +728,14 @@ async def export_summary_csv(
     _: ApiTokenDep,
     db: DbDep,
     link_id: uuid.UUID | None = Query(None),
+    profile_id: str | None = Query(None, description="UUID, none, or omit for all"),
+    platform: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
+    preset: str | None = Query(None),
 ) -> StreamingResponse:
-    start, end = parse_range(date_from, date_to)
+    earliest = await earliest_link_created_at(db)
+    start, end = resolve_stats_period(date_from, date_to, preset, earliest=earliest)
     day = click_day_bucket_utc().label("day")
     stmt = (
         select(
@@ -656,6 +750,11 @@ async def export_summary_csv(
     )
     if link_id is not None:
         stmt = stmt.where(Click.link_id == link_id)
+    else:
+        prof = profile_id if profile_id else "all"
+        plat = platform if platform else "all"
+        link_ids = apply_link_filters(select(Link.id), profile=prof, platform=plat)
+        stmt = stmt.where(Click.link_id.in_(link_ids))
     res = await db.execute(stmt)
     raw = res.all()
 

@@ -9,7 +9,8 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Link, Profile
+from app.models import Click, Link, Profile
+from app.stats_range import dashboard_stats_range, parse_range
 
 
 def parse_profile_id(raw: str | None) -> uuid.UUID | None:
@@ -21,12 +22,26 @@ def parse_profile_id(raw: str | None) -> uuid.UUID | None:
         return None
 
 
-def build_filter_query(profile: str, platform: str) -> str:
+def build_filter_query(
+    profile: str,
+    platform: str,
+    *,
+    preset: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> str:
     params: dict[str, str] = {}
     if profile and profile != "all":
         params["profile"] = profile
     if platform and platform != "all":
         params["platform"] = platform
+    p = (preset or "").strip().lower()
+    if p and p not in ("", "today"):
+        params["preset"] = p
+    if date_from and date_from.strip():
+        params["from"] = date_from.strip()
+    if date_to and date_to.strip():
+        params["to"] = date_to.strip()
     if not params:
         return ""
     return "?" + urlencode(params)
@@ -78,6 +93,29 @@ async def profile_link_counts(db: AsyncSession) -> dict[str, int]:
         counts[key] = n
     counts["all"] = total
     return counts
+
+
+async def earliest_link_created_at(db: AsyncSession):
+    row = await db.execute(select(func.min(Link.created_at)))
+    return row.scalar_one_or_none()
+
+
+def resolve_stats_period(
+    date_from: str | None,
+    date_to: str | None,
+    preset: str | None,
+    *,
+    earliest,
+) -> tuple:
+    custom = (date_from and date_from.strip()) or (date_to and date_to.strip())
+    if (preset and preset.strip()) or not custom:
+        return dashboard_stats_range(date_from, date_to, preset, earliest=earliest)
+    return parse_range(date_from, date_to)
+
+
+def apply_click_link_filters(stmt, profile: str, platform: str):
+    link_ids = apply_link_filters(select(Link.id), profile=profile, platform=platform)
+    return stmt.where(Click.link_id.in_(link_ids))
 
 
 async def platform_link_counts(db: AsyncSession) -> dict[str, int]:
