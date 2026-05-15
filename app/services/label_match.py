@@ -89,3 +89,29 @@ def normalize_account_label(text: str | None) -> str | None:
         return f"{host}{path}".casefold()
 
     return f"{host}{path}".casefold()
+
+
+def account_label_display(text: str | None) -> str | None:
+    """Короткое имя аккаунта для таблицы (username, @handle или id без полного URL)."""
+    if text is None:
+        return None
+    s = str(text).strip()
+    if not s:
+        return None
+    if not re.match(r"^https?://", s, re.I):
+        return s.lstrip("@").strip() or None
+
+    key = normalize_account_label(s)
+    if not key:
+        return None
+    if ":" not in key:
+        return key
+
+    prefix, rest = key.split(":", 1)
+    if prefix == "facebook" and rest.startswith("id:"):
+        return rest[3:]
+    if prefix == "youtube" and rest.startswith("channel:"):
+        return rest[8:]
+    if prefix in ("tiktok", "x", "threads", "telegram", "youtube") and not rest.startswith("@"):
+        return f"@{rest}"
+    return rest

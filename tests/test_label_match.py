@@ -1,6 +1,6 @@
 """Тесты нормализации URL аккаунта для resolve-clicks."""
 
-from app.services.label_match import normalize_account_label
+from app.services.label_match import account_label_display, normalize_account_label
 
 
 def test_tiktok_trailing_slash_and_www():
@@ -19,3 +19,10 @@ def test_facebook_profile_php():
     a = normalize_account_label("https://www.facebook.com/profile.php?id=123456789012")
     b = normalize_account_label("https://facebook.com/123456789012")
     assert a == b == "facebook:id:123456789012"
+
+
+def test_account_label_display_urls():
+    assert account_label_display("https://www.instagram.com/Phil.Redpill/") == "Phil.Redpill"
+    assert account_label_display("https://www.tiktok.com/@User/") == "@user"
+    assert account_label_display("https://www.facebook.com/profile.php?id=123456789012") == "123456789012"
+    assert account_label_display("@plain_handle") == "plain_handle"

@@ -1184,7 +1184,7 @@ a:hover {
   min-width: min(36rem, 100%);
 }
 
-/* Slug | Профиль | Платф. | Аккаунт | Цель | счётчики | действия */
+/* Slug | Профиль | Платф. | Аккаунт | счётчики | действия */
 .table--wide th:nth-child(1),
 .table--wide td:nth-child(1) {
   width: 5.75rem;
@@ -1212,8 +1212,8 @@ a:hover {
 
 .table--wide th:nth-child(4),
 .table--wide td:nth-child(4) {
-  width: 18%;
-  max-width: 14rem;
+  width: 22%;
+  max-width: 18rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1221,14 +1221,7 @@ a:hover {
 }
 
 .table--wide th:nth-child(5),
-.table--wide td:nth-child(5) {
-  min-width: 0;
-  width: auto;
-  text-align: right;
-  padding-left: 1rem;
-  padding-right: 0.35rem;
-}
-
+.table--wide td:nth-child(5),
 .table--wide th:nth-child(6),
 .table--wide td:nth-child(6),
 .table--wide th:nth-child(7),

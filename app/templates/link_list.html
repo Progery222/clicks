@@ -138,7 +138,6 @@
               <th>Профиль</th>
               <th>Платф.</th>
               <th>Аккаунт</th>
-              <th>Цель</th>
               <th class="num">
                 <a href="{{ sort_href('total') }}" class="th-sort{% if sort_by == 'total' %} th-sort--active{% endif %}" title="Сортировать по всего">
                   Всего{% if sort_by == 'total' %}<span class="th-sort__arrow" aria-hidden="true">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>{% endif %}
@@ -180,8 +179,7 @@
                 </span>
                 {% else %}—{% endif %}
               </td>
-              <td class="truncate" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>{{ row.link.label or "—" }}</td>
-              <td class="truncate" title="{{ row.link.destination_url | e }}">{{ row.link.destination_url }}</td>
+              <td class="truncate" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>{{ row.account_display or "—" }}</td>
               <td class="num"><span class="stat-pill js-dash-total">{{ row.total }}</span></td>
               <td class="num"><span class="stat-pill stat-pill--accent js-dash-today">{{ row.today }}</span></td>
               <td class="num"><span class="stat-pill js-dash-period">{{ row.period_clicks | default(0) }}</span></td>

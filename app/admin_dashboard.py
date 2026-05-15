@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services.label_match import account_label_display
 from app.admin_helpers import (
     apply_link_filters,
     build_filter_query,
@@ -198,6 +199,7 @@ async def load_dashboard_page_data(
         link_rows.append(
             {
                 "link": link,
+                "account_display": account_label_display(link.label),
                 "total": total_all,
                 "today": today,
                 "period_clicks": period_clicks,
