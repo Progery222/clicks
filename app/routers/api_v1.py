@@ -92,7 +92,7 @@ class LinkCreate(BaseModel):
 
 
 class LinkBulkCreate(BaseModel):
-    """Одна целевая ссылка и несколько меток — по одной короткой ссылке на метку."""
+    """Одна целевая ссылка и несколько аккаунтов — по одной короткой ссылке на аккаунт."""
 
     destination_url: str
     labels: list[str] | None = None
@@ -245,18 +245,18 @@ def _resolve_bulk_labels(body: LinkBulkCreate) -> list[str]:
     if not body.labels and not body.labels_text:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provide labels (array) or labels_text (multiline string)",
+            detail="Provide accounts via labels (array) or labels_text (multiline string)",
         )
     label_list = normalize_bulk_labels(raw)
     if not label_list:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one non-empty label is required",
+            detail="At least one non-empty account is required",
         )
     if len(label_list) > MAX_BULK_LABELS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"At most {MAX_BULK_LABELS} labels per request",
+            detail=f"At most {MAX_BULK_LABELS} accounts per request",
         )
     return label_list
 

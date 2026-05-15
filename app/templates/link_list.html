@@ -18,7 +18,7 @@
       <thead>
         <tr>
           <th>Slug</th>
-          <th>Метка</th>
+          <th>Аккаунт</th>
           <th>Цель</th>
           <th class="num">Всего</th>
           <th class="num">Сегодня</th>
@@ -76,9 +76,9 @@
         <input class="input" type="url" name="destination_url" required autocomplete="url"
           placeholder="https://rumble.com/c/...">
       </label>
-      <label class="field-label">Метка (для себя)
+      <label class="field-label">Аккаунт
         <input class="input" type="text" name="label" maxlength="255" autocomplete="off"
-          placeholder="TikTok @user">
+          placeholder="https://www.tiktok.com/@user">
       </label>
       <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
     </form>
@@ -92,14 +92,14 @@
       <h2 id="bulk-link-modal-title" class="new-link-modal__title">Массовое создание</h2>
       <button type="button" class="new-link-modal__close" data-bulk-link-dismiss aria-label="Закрыть">×</button>
     </div>
-    <p class="muted small new-link-modal__hint">Одна целевая ссылка и список меток — по одной на строку. Для каждой метки создаётся отдельная короткая ссылка.</p>
+    <p class="muted small new-link-modal__hint">Одна целевая ссылка и список аккаунтов — по одному на строку. Для каждого аккаунта создаётся отдельная короткая ссылка.</p>
     <p id="bulk-link-modal-error" class="new-link-modal__error error error--box" hidden></p>
     <form id="bulk-link-form" method="post" action="/admin/links/bulk" class="stack">
       <label class="field-label">Целевой URL
         <input class="input" type="url" name="destination_url" required autocomplete="url"
           placeholder="https://rumble.com/c/...">
       </label>
-      <label class="field-label">Метки (по одной на строку)
+      <label class="field-label">Аккаунты (по одному на строку)
         <textarea class="input input--textarea" name="labels" required rows="12" spellcheck="false"
           placeholder="https://www.tiktok.com/@user&#10;http://tiktok.com/@other"></textarea>
       </label>

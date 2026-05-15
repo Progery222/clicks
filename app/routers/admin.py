@@ -221,12 +221,12 @@ async def link_bulk_post(
 
     label_list = parse_label_lines(labels)
     if not label_list:
-        msg = "Добавьте хотя бы одну метку (по одной на строку)."
+        msg = "Добавьте хотя бы один аккаунт (по одному на строку)."
         if modal:
             return JSONResponse({"error": msg}, status_code=400)
         raise HTTPException(status_code=400, detail=msg)
     if len(label_list) > MAX_BULK_LABELS:
-        msg = f"Не больше {MAX_BULK_LABELS} меток за раз."
+        msg = f"Не больше {MAX_BULK_LABELS} аккаунтов за раз."
         if modal:
             return JSONResponse({"error": msg}, status_code=400)
         raise HTTPException(status_code=400, detail=msg)

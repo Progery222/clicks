@@ -86,7 +86,7 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" "https://example.com/api/v1/me"
 | `id` | UUID ссылки |
 | `slug` | Короткий код для пути редиректа `/r/{slug}` |
 | `destination_url` | Целевой URL |
-| `label` | Подпись или `null` |
+| `label` | Аккаунт (например URL TikTok) или `null` |
 | `created_at`, `updated_at` | ISO 8601 |
 | `total_clicks` | Всего кликов по ссылке |
 | `today_clicks` | Кликов за **текущие сутки UTC** (как в админке) |
@@ -102,12 +102,12 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" "https://example.com/api/v1/me"
 ```json
 {
   "destination_url": "https://example.com/page",
-  "label": "Необязательная подпись"
+  "label": "https://www.tiktok.com/@user"
 }
 ```
 
 - **`destination_url`** — обязательно; должен начинаться с **`http://`** или **`https://`**.
-- **`label`** — необязательно; пустая строка сохраняется как отсутствие подписи (`null`).
+- **`label`** — необязательно; идентификатор аккаунта (часто URL профиля). Пустая строка → `null`.
 
 **Ответ `201`:** объект ссылки в том же формате, что элемент списка (счётчики кликов для новой ссылки будут нулевыми).
 
@@ -117,9 +117,9 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" "https://example.com/api/v1/me"
 
 ### `POST /api/v1/links/bulk`
 
-Массовое создание: **одна** целевая ссылка и **несколько меток** — для каждой метки создаётся отдельная короткая ссылка (как «Массовое создание» в админке).
+Массовое создание: **одна** целевая ссылка и **несколько аккаунтов** — для каждого аккаунта создаётся отдельная короткая ссылка (как «Массовое создание» в админке).
 
-**Тело JSON** — укажите **`labels`** (массив строк) **или** **`labels_text`** (многострочная строка, по одной метке на строку), можно не передавать оба сразу:
+**Тело JSON** — укажите **`labels`** (массив строк с аккаунтами) **или** **`labels_text`** (многострочная строка, по одному аккаунту на строку):
 
 ```json
 {
@@ -141,8 +141,8 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" "https://example.com/api/v1/me"
 ```
 
 - Пустые строки пропускаются.
-- Одинаковые метки (без учёта регистра) объединяются в одну ссылку.
-- Не больше **200** меток за запрос.
+- Одинаковые аккаунты (без учёта регистра) объединяются в одну ссылку.
+- Не больше **200** аккаунтов за запрос.
 - **`destination_url`** — только `http://` или `https://`.
 
 **Ответ `201`:**
@@ -154,7 +154,7 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" "https://example.com/api/v1/me"
 }
 ```
 
-**Ошибки `400`:** неверный URL, нет меток, слишком много меток, не переданы ни `labels`, ни `labels_text`.
+**Ошибки `400`:** неверный URL, нет аккаунтов, слишком много аккаунтов, не переданы ни `labels`, ни `labels_text`.
 
 ---
 
@@ -168,13 +168,13 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" "https://example.com/api/v1/me"
 
 Частичное обновление. В теле можно передать только нужные поля.
 
-**Пример — сменить только подпись:**
+**Пример — сменить только аккаунт:**
 
 ```json
-{ "label": "Новая подпись" }
+{ "label": "https://www.tiktok.com/@newuser" }
 ```
 
-**Сбросить подпись:**
+**Сбросить аккаунт:**
 
 ```json
 { "label": null }
@@ -289,7 +289,7 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" \
 
 # Создание одной ссылки
 curl -sS -X POST -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
-  -d '{"destination_url":"https://example.com","label":"Тест"}' \
+  -d '{"destination_url":"https://example.com","label":"https://www.tiktok.com/@user"}' \
   "$BASE/api/v1/links"
 
 # Массовое создание
