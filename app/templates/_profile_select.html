@@ -1,0 +1,8 @@
+<label class="field-label">Профиль
+  <select class="input" name="profile_id">
+    <option value="" {% if selected_profile_id is none %}selected{% endif %}>— Без профиля —</option>
+    {% for p in profiles %}
+    <option value="{{ p.id }}" {% if selected_profile_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+    {% endfor %}
+  </select>
+</label>

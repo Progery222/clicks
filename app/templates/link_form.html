@@ -13,8 +13,9 @@
     <label class="field-label">Аккаунт
       <input class="input" type="text" name="label" maxlength="255"
         value="{{ link.label if link and link.label else '' }}"
-        placeholder="TikTok @user">
+        placeholder="https://www.tiktok.com/@user">
     </label>
+    {% include "_profile_select.html" %}
     {% if link %}
     <p class="muted slug-hint">Slug не меняется: <code class="slug-inline">{{ link.slug }}</code></p>
     {% endif %}

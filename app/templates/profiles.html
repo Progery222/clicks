@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Профили — Bio links{% endblock %}
+{% block content %}
+<section class="card card--hero">
+  <div class="row between wrap">
+    <div>
+      <h1 class="page-title">Профили</h1>
+      <p class="muted small">Группы коротких ссылок. У каждого профиля — свой набор ссылок.</p>
+    </div>
+    <a class="btn" href="/admin">← К ссылкам</a>
+  </div>
+
+  <form method="post" action="/admin/profiles/new" class="stack profile-form-new">
+    <h2 class="h2-like">Новый профиль</h2>
+    <div class="row wrap gap">
+      <label class="field-label flex-1">Название
+        <input class="input" type="text" name="name" required maxlength="255" placeholder="Например: Phil Rumble">
+      </label>
+      <label class="field-label">Цвет
+        <input class="input input--color" type="color" name="color" value="#6366f1">
+      </label>
+      <div class="field-label field-label--btn-wrap">
+        <span class="sr-only">Создать</span>
+        <button type="submit" class="btn btn-primary">Создать</button>
+      </div>
+    </div>
+  </form>
+</section>
+
+{% if profiles %}
+<section class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Профиль</th>
+          <th class="num">Ссылок</th>
+          <th class="actions-head"><span class="sr-only">Действия</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in profiles %}
+        <tr>
+          <td>
+            <span class="profile-pill">
+              <span class="profile-pill__dot" style="background: {{ p.color }}"></span>
+              {{ p.name }}
+            </span>
+          </td>
+          <td class="num">{{ profile_counts.get(p.id|string, 0) }}</td>
+          <td class="actions actions--icons">
+            <a class="btn btn-sm" href="/admin?profile={{ p.id }}">Ссылки</a>
+            <form method="post" action="/admin/profiles/{{ p.id }}/delete" class="inline icon-btn-form"
+                  data-confirm-title="Удалить профиль?"
+                  data-confirm-message="Профиль «{{ p.name }}» будет удалён. Ссылки останутся без профиля."
+                  data-confirm-ok="Удалить">
+              <button type="submit" class="icon-btn icon-btn--danger" title="Удалить" aria-label="Удалить">×</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% else %}
+<section class="card empty-state">
+  <p class="muted">Пока нет профилей. Создайте первый выше.</p>
+</section>
+{% endif %}
+{% endblock %}

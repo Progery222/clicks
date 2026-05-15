@@ -14,11 +14,15 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.csv_stream import stream_csv
+from app.admin_helpers import apply_link_filters
 from app.database import get_db
-from app.models import Click, Link
+from app.models import Click, Link, Profile
+from app.platforms import PLATFORMS, platform_label
+from app.services.links_meta import apply_link_label, apply_link_profile
 from app.services.ip_lockout import clear_api_failures, client_ip, record_api_token_failure
 from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_path
 from app.services.stats import (
@@ -86,9 +90,36 @@ async def _unique_slug(db: AsyncSession) -> str:
     raise RuntimeError("Could not allocate slug")
 
 
+class ProfileCreate(BaseModel):
+    name: str
+    color: str = "#6366f1"
+
+
+class ProfilePatch(BaseModel):
+    name: str | None = None
+    color: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProfileOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    color: str
+    link_count: int = 0
+    created_at: str
+    updated_at: str
+
+
+class ProfilesListOut(BaseModel):
+    items: list[ProfileOut]
+    total: int
+
+
 class LinkCreate(BaseModel):
     destination_url: str
     label: str | None = None
+    profile_id: uuid.UUID | None = None
 
 
 class LinkBulkCreate(BaseModel):
@@ -97,6 +128,7 @@ class LinkBulkCreate(BaseModel):
     destination_url: str
     labels: list[str] | None = None
     labels_text: str | None = None
+    profile_id: uuid.UUID | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -109,6 +141,8 @@ class LinksBulkOut(BaseModel):
 class LinkPatch(BaseModel):
     destination_url: str | None = None
     label: str | None = None
+    profile_id: uuid.UUID | None = None
+    clear_profile: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
@@ -118,6 +152,10 @@ class LinkOut(BaseModel):
     slug: str
     destination_url: str
     label: str | None
+    platform: str | None = None
+    platform_label: str | None = None
+    profile_id: uuid.UUID | None = None
+    profile_name: str | None = None
     created_at: str
     updated_at: str
     total_clicks: int = 0
@@ -131,11 +169,16 @@ class LinkOut(BaseModel):
         total_clicks: int = 0,
         today_clicks: int = 0,
     ) -> LinkOut:
+        prof = link.profile if hasattr(link, "profile") else None
         return cls(
             id=link.id,
             slug=link.slug,
             destination_url=link.destination_url,
             label=link.label,
+            platform=link.platform,
+            platform_label=platform_label(link.platform),
+            profile_id=link.profile_id,
+            profile_name=prof.name if prof else None,
             created_at=link.created_at.isoformat() if link.created_at else "",
             updated_at=link.updated_at.isoformat() if link.updated_at else "",
             total_clicks=total_clicks,
@@ -187,7 +230,87 @@ async def api_me(_: ApiTokenDep) -> dict[str, object]:
         "geoip_db_present": (
             resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
         ),
+        "platforms": PLATFORMS,
     }
+
+
+async def _ensure_profile(db: AsyncSession, profile_id: uuid.UUID | None) -> uuid.UUID | None:
+    if profile_id is None:
+        return None
+    if await db.get(Profile, profile_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    return profile_id
+
+
+@router.get("/profiles", response_model=ProfilesListOut)
+async def list_profiles(_: ApiTokenDep, db: DbDep) -> ProfilesListOut:
+    profiles = list((await db.execute(select(Profile).order_by(Profile.name))).scalars().all())
+    counts_rows = (
+        await db.execute(select(Link.profile_id, func.count()).group_by(Link.profile_id))
+    ).all()
+    counts = {str(pid) if pid else "none": int(c) for pid, c in counts_rows}
+    items = [
+        ProfileOut(
+            id=p.id,
+            name=p.name,
+            color=p.color,
+            link_count=counts.get(str(p.id), 0),
+            created_at=p.created_at.isoformat() if p.created_at else "",
+            updated_at=p.updated_at.isoformat() if p.updated_at else "",
+        )
+        for p in profiles
+    ]
+    return ProfilesListOut(items=items, total=len(items))
+
+
+@router.post("/profiles", response_model=ProfileOut, status_code=status.HTTP_201_CREATED)
+async def create_profile(_: ApiTokenDep, db: DbDep, body: ProfileCreate) -> ProfileOut:
+    c = (body.color or "#6366f1").strip()
+    if not c.startswith("#"):
+        c = "#6366f1"
+    p = Profile(name=body.name.strip(), color=c[:7])
+    db.add(p)
+    await db.commit()
+    await db.refresh(p)
+    return ProfileOut(
+        id=p.id,
+        name=p.name,
+        color=p.color,
+        link_count=0,
+        created_at=p.created_at.isoformat() if p.created_at else "",
+        updated_at=p.updated_at.isoformat() if p.updated_at else "",
+    )
+
+
+@router.get("/profiles/{profile_id}", response_model=ProfileOut)
+async def get_profile(profile_id: uuid.UUID, _: ApiTokenDep, db: DbDep) -> ProfileOut:
+    p = await db.get(Profile, profile_id)
+    if p is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    cnt = int(
+        (
+            await db.execute(
+                select(func.count()).select_from(Link).where(Link.profile_id == profile_id)
+            )
+        ).scalar_one()
+    )
+    return ProfileOut(
+        id=p.id,
+        name=p.name,
+        color=p.color,
+        link_count=cnt,
+        created_at=p.created_at.isoformat() if p.created_at else "",
+        updated_at=p.updated_at.isoformat() if p.updated_at else "",
+    )
+
+
+@router.delete("/profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_profile(profile_id: uuid.UUID, _: ApiTokenDep, db: DbDep) -> Response:
+    if await db.get(Profile, profile_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    await db.execute(delete(Profile).where(Profile.id == profile_id))
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/links", response_model=LinksListOut)
@@ -196,10 +319,20 @@ async def list_links(
     db: DbDep,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    profile_id: str | None = Query(None, description="UUID, none, or omit for all"),
+    platform: str | None = Query(None, description="Platform slug or omit for all"),
 ) -> LinksListOut:
-    count_q = await db.execute(select(func.count()).select_from(Link))
+    prof_filter = profile_id if profile_id else "all"
+    plat_filter = platform if platform else "all"
+    id_subq = apply_link_filters(select(Link.id), profile=prof_filter, platform=plat_filter).subquery()
+    count_q = await db.execute(select(func.count()).select_from(id_subq))
     total = int(count_q.scalar_one())
-    res = await db.execute(select(Link).order_by(Link.created_at.desc()).limit(limit).offset(offset))
+    stmt = apply_link_filters(
+        select(Link).options(selectinload(Link.profile)),
+        profile=prof_filter,
+        platform=plat_filter,
+    )
+    res = await db.execute(stmt.order_by(Link.created_at.desc()).limit(limit).offset(offset))
     links = list(res.scalars().all())
     try:
         counts = await dashboard_click_counts(db)
@@ -224,12 +357,11 @@ async def create_link(_: ApiTokenDep, db: DbDep, body: LinkCreate) -> LinkOut:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="URL must start with http:// or https://",
         )
+    pid = await _ensure_profile(db, body.profile_id)
     slug = await _unique_slug(db)
-    link = Link(
-        slug=slug,
-        destination_url=body.destination_url.strip(),
-        label=(body.label or "").strip() or None,
-    )
+    link = Link(slug=slug, destination_url=body.destination_url.strip())
+    apply_link_label(link, body.label)
+    apply_link_profile(link, pid)
     db.add(link)
     await db.commit()
     await db.refresh(link)
@@ -269,11 +401,14 @@ async def create_links_bulk(_: ApiTokenDep, db: DbDep, body: LinkBulkCreate) -> 
             detail="URL must start with http:// or https://",
         )
     label_list = _resolve_bulk_labels(body)
+    pid = await _ensure_profile(db, body.profile_id)
     dest_url = body.destination_url.strip()
     created_links: list[Link] = []
     for label in label_list:
         slug = await _unique_slug(db)
-        link = Link(slug=slug, destination_url=dest_url, label=label)
+        link = Link(slug=slug, destination_url=dest_url)
+        apply_link_label(link, label)
+        apply_link_profile(link, pid)
         db.add(link)
         created_links.append(link)
     await db.commit()
@@ -285,7 +420,11 @@ async def create_links_bulk(_: ApiTokenDep, db: DbDep, body: LinkBulkCreate) -> 
 
 @router.get("/links/{link_id}", response_model=LinkOut)
 async def get_link(link_id: uuid.UUID, _: ApiTokenDep, db: DbDep) -> LinkOut:
-    link = await db.get(Link, link_id)
+    link = (
+        await db.execute(
+            select(Link).options(selectinload(Link.profile)).where(Link.id == link_id)
+        )
+    ).scalar_one_or_none()
     if link is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Link not found")
     try:
@@ -328,11 +467,12 @@ async def patch_link(
         link.destination_url = url.strip()
     if "label" in data:
         raw = data["label"]
-        if raw is None:
-            link.label = None
-        else:
-            assert isinstance(raw, str)
-            link.label = raw.strip() or None
+        apply_link_label(link, None if raw is None else str(raw))
+    if body.clear_profile:
+        apply_link_profile(link, None)
+    elif "profile_id" in data:
+        pid = data["profile_id"]
+        apply_link_profile(link, await _ensure_profile(db, pid if isinstance(pid, uuid.UUID) else None))
     await db.commit()
     await db.refresh(link)
     try:

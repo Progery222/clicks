@@ -11,11 +11,22 @@ from pathlib import Path
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.admin_helpers import (
+    apply_link_filters,
+    build_filter_query,
+    load_profiles,
+    parse_profile_id,
+    platform_link_counts,
+    profile_link_counts,
+)
 from app.config import get_settings
 from app.csv_stream import stream_csv
 from app.database import get_db
-from app.models import Click, Link
+from app.models import Click, Link, Profile
+from app.platforms import PLATFORMS, platform_color, platform_label
+from app.services.links_meta import apply_link_label, apply_link_profile
 from app.security import verify_env_password
 from app.services.ip_lockout import (
     clear_admin_failures,
@@ -38,7 +49,11 @@ from app.utils.slug import random_slug
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
+_templates_dir = str(Path(__file__).resolve().parent.parent / "templates")
+templates = Jinja2Templates(directory=_templates_dir)
+templates.env.globals["admin_filter_href"] = (
+    lambda prof, plat: "/admin" + build_filter_query(prof, plat)
+)
 
 
 def _require_admin(request: Request) -> None:
@@ -115,22 +130,76 @@ async def dashboard(
     request: Request,
     db: AsyncSession = Depends(get_db),
     new: str | None = Query(None),
+    profile: str = Query("all"),
+    platform: str = Query("all"),
 ):
     _require_admin(request)
-    res = await db.execute(select(Link).order_by(Link.created_at.desc()))
-    links = list(res.scalars().all())
+    stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
+    stmt = apply_link_filters(stmt, profile=profile, platform=platform)
+    links = list((await db.execute(stmt)).scalars().all())
     try:
         counts = await dashboard_click_counts(db)
     except Exception:
         log.exception("dashboard_click_counts failed")
         counts = {}
-    link_rows = [{"link": link, "total": counts.get(link.id, (0, 0))[0], "today": counts.get(link.id, (0, 0))[1]} for link in links]
+    link_rows = [
+        {
+            "link": link,
+            "total": counts.get(link.id, (0, 0))[0],
+            "today": counts.get(link.id, (0, 0))[1],
+            "platform_label": platform_label(link.platform),
+            "platform_color": platform_color(link.platform),
+        }
+        for link in links
+    ]
+    profiles = await load_profiles(db)
+    prof_counts = await profile_link_counts(db)
+    plat_counts = await platform_link_counts(db)
+    profile_filters = [
+        {"id": "all", "name": "Все", "color": None, "count": prof_counts.get("all", 0)},
+        {
+            "id": "none",
+            "name": "Без профиля",
+            "color": None,
+            "count": prof_counts.get("none", 0),
+        },
+    ]
+    for p in profiles:
+        profile_filters.append(
+            {
+                "id": str(p.id),
+                "name": p.name,
+                "color": p.color,
+                "count": prof_counts.get(str(p.id), 0),
+            }
+        )
+    platform_filters = [{"id": "all", "label": "Все", "color": None, "count": plat_counts.get("all", 0)}]
+    for p in PLATFORMS:
+        platform_filters.append(
+            {
+                "id": p["id"],
+                "label": p["label"],
+                "color": p["color"],
+                "count": plat_counts.get(p["id"], 0),
+            }
+        )
+    default_profile_id = None
+    if profile not in ("all", "none"):
+        default_profile_id = parse_profile_id(profile)
     return templates.TemplateResponse(
         "link_list.html",
         {
             "request": request,
             "link_rows": link_rows,
             "open_new_link_modal": new == "1",
+            "profiles": profiles,
+            "platforms": PLATFORMS,
+            "filter_profile": profile,
+            "filter_platform": platform,
+            "profile_filters": profile_filters,
+            "platform_filters": platform_filters,
+            "filter_qs": build_filter_query(profile, platform),
+            "selected_profile_id": default_profile_id,
         },
     )
 
@@ -162,6 +231,46 @@ async def _unique_slug(db: AsyncSession) -> str:
     raise RuntimeError("Could not allocate slug")
 
 
+@router.get("/profiles", response_class=HTMLResponse)
+async def profiles_page(request: Request, db: AsyncSession = Depends(get_db)):
+    _require_admin(request)
+    profiles = await load_profiles(db)
+    counts = await profile_link_counts(db)
+    profile_counts: dict[uuid.UUID, int] = {p.id: counts.get(str(p.id), 0) for p in profiles}
+    return templates.TemplateResponse(
+        "profiles.html",
+        {"request": request, "profiles": profiles, "profile_counts": profile_counts},
+    )
+
+
+@router.post("/profiles/new")
+async def profile_create(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    name: str = Form(...),
+    color: str = Form("#6366f1"),
+):
+    _require_admin(request)
+    c = (color or "#6366f1").strip()
+    if not c.startswith("#") or len(c) > 7:
+        c = "#6366f1"
+    db.add(Profile(name=name.strip(), color=c))
+    await db.commit()
+    return RedirectResponse("/admin/profiles", status_code=302)
+
+
+@router.post("/profiles/{profile_id}/delete")
+async def profile_delete(
+    request: Request,
+    profile_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    _require_admin(request)
+    await db.execute(delete(Profile).where(Profile.id == profile_id))
+    await db.commit()
+    return RedirectResponse("/admin/profiles", status_code=302)
+
+
 @router.get("/links/new")
 async def link_new_get(request: Request) -> RedirectResponse:
     """Создание ссылки — только модальное окно на /admin (редирект для старых закладок)."""
@@ -175,9 +284,11 @@ async def link_new_post(
     db: AsyncSession = Depends(get_db),
     destination_url: str = Form(...),
     label: str | None = Form(None),
+    profile_id: str = Form(""),
 ):
     _require_admin(request)
     modal = (request.headers.get("x-modal-form") or "").strip() == "1"
+    profiles = await load_profiles(db)
 
     if not _valid_url(destination_url):
         msg = "URL должен начинаться с http:// или https://"
@@ -190,11 +301,15 @@ async def link_new_post(
                 "link": None,
                 "error": msg,
                 "title": "Новая ссылка",
+                "profiles": profiles,
+                "selected_profile_id": parse_profile_id(profile_id),
             },
             status_code=400,
         )
     slug = await _unique_slug(db)
-    link = Link(slug=slug, destination_url=destination_url.strip(), label=(label or "").strip() or None)
+    link = Link(slug=slug, destination_url=destination_url.strip())
+    apply_link_label(link, label)
+    apply_link_profile(link, parse_profile_id(profile_id))
     db.add(link)
     await db.commit()
     dest = f"/admin/links/{link.id}/stats"
@@ -209,9 +324,11 @@ async def link_bulk_post(
     db: AsyncSession = Depends(get_db),
     destination_url: str = Form(...),
     labels: str = Form(...),
+    profile_id: str = Form(""),
 ):
     _require_admin(request)
     modal = (request.headers.get("x-modal-form") or "").strip() == "1"
+    pid = parse_profile_id(profile_id)
 
     if not _valid_url(destination_url):
         msg = "URL должен начинаться с http:// или https://"
@@ -234,12 +351,17 @@ async def link_bulk_post(
     dest_url = destination_url.strip()
     for label in label_list:
         slug = await _unique_slug(db)
-        db.add(Link(slug=slug, destination_url=dest_url, label=label))
+        link = Link(slug=slug, destination_url=dest_url)
+        apply_link_label(link, label)
+        apply_link_profile(link, pid)
+        db.add(link)
     await db.commit()
 
+    prof_q = str(pid) if pid else "all"
+    redirect = "/admin" + build_filter_query(prof_q, "all")
     if modal:
-        return JSONResponse({"redirect": "/admin", "created": len(label_list)})
-    return RedirectResponse("/admin", status_code=302)
+        return JSONResponse({"redirect": redirect, "created": len(label_list)})
+    return RedirectResponse(redirect, status_code=302)
 
 
 @router.get("/links/{link_id}/edit", response_class=HTMLResponse)
@@ -252,9 +374,17 @@ async def link_edit_get(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
+    profiles = await load_profiles(db)
     return templates.TemplateResponse(
         "link_form.html",
-        {"request": request, "link": link, "error": None, "title": "Правка ссылки"},
+        {
+            "request": request,
+            "link": link,
+            "error": None,
+            "title": "Правка ссылки",
+            "profiles": profiles,
+            "selected_profile_id": link.profile_id,
+        },
     )
 
 
@@ -265,11 +395,13 @@ async def link_edit_post(
     db: AsyncSession = Depends(get_db),
     destination_url: str = Form(...),
     label: str | None = Form(None),
+    profile_id: str = Form(""),
 ):
     _require_admin(request)
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
+    profiles = await load_profiles(db)
     if not _valid_url(destination_url):
         return templates.TemplateResponse(
             "link_form.html",
@@ -278,11 +410,14 @@ async def link_edit_post(
                 "link": link,
                 "error": "URL должен начинаться с http:// или https://",
                 "title": "Правка ссылки",
+                "profiles": profiles,
+                "selected_profile_id": link.profile_id,
             },
             status_code=400,
         )
     link.destination_url = destination_url.strip()
-    link.label = (label or "").strip() or None
+    apply_link_label(link, label)
+    apply_link_profile(link, parse_profile_id(profile_id))
     await db.commit()
     return RedirectResponse(f"/admin/links/{link.id}/stats", status_code=302)
 

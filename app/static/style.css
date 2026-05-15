@@ -563,6 +563,152 @@ a:hover {
   font-size: 0.82rem;
 }
 
+.input--color {
+  padding: 0.2rem;
+  height: 2.75rem;
+  min-width: 3.5rem;
+}
+
+.flex-1 {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.field-label--btn-wrap {
+  display: flex;
+  align-items: flex-end;
+}
+
+.h2-like {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0 0.25rem 0.5rem;
+}
+
+.filter-bar__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+}
+
+.filter-bar__label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  min-width: 4.5rem;
+}
+
+.filter-bar__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.filter-pill:hover {
+  background: rgba(129, 140, 248, 0.1);
+  border-color: rgba(129, 140, 248, 0.35);
+  color: var(--text);
+}
+
+.filter-pill--active {
+  background: #fff;
+  color: #0c1222;
+  border-color: #fff;
+  font-weight: 600;
+}
+
+.filter-pill--muted {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.filter-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.filter-pill__count {
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75em;
+}
+
+.profile-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.profile-pill--sm {
+  font-size: 0.78rem;
+}
+
+.profile-pill__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.platform-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.platform-badge__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .new-link-modal,
   .new-link-modal__panel {
@@ -617,7 +763,7 @@ a:hover {
   min-width: min(36rem, 100%);
 }
 
-/* Slug и аккаунт слева; «Цель» занимает остаток и прижата к счётчикам справа */
+/* Slug | Профиль | Платф. | Аккаунт | Цель | счётчики | действия */
 .table--wide th:nth-child(1),
 .table--wide td:nth-child(1) {
   width: 5.75rem;
@@ -627,8 +773,8 @@ a:hover {
 
 .table--wide th:nth-child(2),
 .table--wide td:nth-child(2) {
-  width: 22%;
-  max-width: 17rem;
+  width: 7rem;
+  max-width: 8rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -637,17 +783,35 @@ a:hover {
 
 .table--wide th:nth-child(3),
 .table--wide td:nth-child(3) {
+  width: 5.5rem;
+  max-width: 6rem;
   min-width: 0;
-  width: auto;
-  text-align: right;
-  padding-left: 1.25rem;
-  padding-right: 0.35rem;
+  overflow: hidden;
 }
 
 .table--wide th:nth-child(4),
-.table--wide td:nth-child(4),
+.table--wide td:nth-child(4) {
+  width: 18%;
+  max-width: 14rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .table--wide th:nth-child(5),
 .table--wide td:nth-child(5) {
+  min-width: 0;
+  width: auto;
+  text-align: right;
+  padding-left: 1rem;
+  padding-right: 0.35rem;
+}
+
+.table--wide th:nth-child(6),
+.table--wide td:nth-child(6),
+.table--wide th:nth-child(7),
+.table--wide td:nth-child(7) {
   width: 5.25rem;
   min-width: 5.25rem;
   max-width: 5.25rem;

@@ -12,12 +12,43 @@
       <button type="button" class="btn js-open-bulk-link-modal">Массовое создание</button>
     </div>
   </div>
+
+  <div class="filter-bar">
+    <div class="filter-bar__group">
+      <span class="filter-bar__label">Профиль</span>
+      <div class="filter-bar__pills">
+        {% for pf in profile_filters | default([]) %}
+        <a class="filter-pill{% if (filter_profile | default('all')) == pf.id %} filter-pill--active{% endif %}"
+          href="{{ admin_filter_href(pf.id, filter_platform | default('all')) }}">
+          {% if pf.color %}<span class="filter-pill__dot" style="background: {{ pf.color }}"></span>{% endif %}
+          {{ pf.name }}<span class="filter-pill__count">{{ pf.count }}</span>
+        </a>
+        {% endfor %}
+        <a class="filter-pill filter-pill--muted" href="/admin/profiles">Управление…</a>
+      </div>
+    </div>
+    <div class="filter-bar__group">
+      <span class="filter-bar__label">Платформа</span>
+      <div class="filter-bar__pills">
+        {% for pl in platform_filters | default([]) %}
+        <a class="filter-pill{% if (filter_platform | default('all')) == pl.id %} filter-pill--active{% endif %}"
+          href="{{ admin_filter_href(filter_profile | default('all'), pl.id) }}">
+          {% if pl.color %}<span class="filter-pill__dot" style="background: {{ pl.color }}"></span>{% endif %}
+          {{ pl.label }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
   {% if link_rows is defined and link_rows %}
   <div class="table-wrap table-wrap--flush">
     <table class="table table--wide">
       <thead>
         <tr>
           <th>Slug</th>
+          <th>Профиль</th>
+          <th>Платф.</th>
           <th>Аккаунт</th>
           <th>Цель</th>
           <th class="num">Всего</th>
@@ -35,6 +66,22 @@
               aria-label="Скопировать ссылку /r/{{ row.link.slug }}">
               <code>{{ row.link.slug }}</code>
             </button>
+          </td>
+          <td class="truncate">
+            {% if row.link.profile %}
+            <span class="profile-pill profile-pill--sm" title="{{ row.link.profile.name }}">
+              <span class="profile-pill__dot" style="background: {{ row.link.profile.color }}"></span>
+              {{ row.link.profile.name }}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if row.link.platform %}
+            <span class="platform-badge" title="{{ row.platform_label }}">
+              <span class="platform-badge__dot" style="background: {{ row.platform_color }}"></span>
+              <span class="platform-badge__label">{{ row.platform_label }}</span>
+            </span>
+            {% else %}—{% endif %}
           </td>
           <td class="truncate" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>{{ row.link.label or "—" }}</td>
           <td class="truncate" title="{{ row.link.destination_url | e }}">{{ row.link.destination_url }}</td>
@@ -87,6 +134,7 @@
         <input class="input" type="text" name="label" maxlength="255" autocomplete="off"
           placeholder="https://www.tiktok.com/@user">
       </label>
+      {% include "_profile_select.html" %}
       <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
     </form>
   </div>
@@ -106,6 +154,7 @@
         <input class="input" type="url" name="destination_url" required autocomplete="url"
           placeholder="https://rumble.com/c/...">
       </label>
+      {% include "_profile_select.html" %}
       <label class="field-label">Аккаунты (по одному на строку)
         <textarea class="input input--textarea" name="labels" required rows="12" spellcheck="false"
           placeholder="https://www.tiktok.com/@user&#10;http://tiktok.com/@other"></textarea>
