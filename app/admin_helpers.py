@@ -32,20 +32,31 @@ def build_filter_query(profile: str, platform: str) -> str:
     return "?" + urlencode(params)
 
 
+def link_filter_predicates(
+    profile: str | None,
+    platform: str | None,
+) -> list:
+    """Условия WHERE для фильтра профиля/платформы (select и delete)."""
+    preds: list = []
+    if profile == "none":
+        preds.append(Link.profile_id.is_(None))
+    elif profile and profile != "all":
+        pid = parse_profile_id(profile)
+        if pid is not None:
+            preds.append(Link.profile_id == pid)
+    if platform and platform != "all":
+        preds.append(Link.platform == platform)
+    return preds
+
+
 def apply_link_filters(
     stmt: Select[tuple[Link]],
     *,
     profile: str | None,
     platform: str | None,
 ) -> Select[tuple[Link]]:
-    if profile == "none":
-        stmt = stmt.where(Link.profile_id.is_(None))
-    elif profile and profile != "all":
-        pid = parse_profile_id(profile)
-        if pid is not None:
-            stmt = stmt.where(Link.profile_id == pid)
-    if platform and platform != "all":
-        stmt = stmt.where(Link.platform == platform)
+    for pred in link_filter_predicates(profile, platform):
+        stmt = stmt.where(pred)
     return stmt
 
 

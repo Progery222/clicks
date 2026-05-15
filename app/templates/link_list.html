@@ -128,6 +128,14 @@
           </tbody>
         </table>
       </div>
+      <div class="links-bulk-delete">
+        <form method="post" action="/admin/links/delete-all{{ filter_qs | default('') }}" class="links-bulk-delete__form"
+              data-confirm-title="Удалить все ссылки?"
+              data-confirm-message="Будут удалены все {{ link_rows | length }} ссылок из текущего списка (с учётом фильтров) и вся связанная статистика кликов. Восстановить данные будет нельзя."
+              data-confirm-ok="Удалить все">
+          <button type="submit" class="btn btn-danger">Удалить все</button>
+        </form>
+      </div>
       {% else %}
       <div class="empty-state">
         <p class="empty-state__title">Пока нет ссылок</p>

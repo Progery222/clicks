@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.admin_helpers import (
     apply_link_filters,
     build_filter_query,
+    link_filter_predicates,
     load_profiles,
     parse_profile_id,
     platform_link_counts,
@@ -435,6 +436,23 @@ async def link_delete(
     await db.execute(delete(Link).where(Link.id == link_id))
     await db.commit()
     return RedirectResponse("/admin", status_code=302)
+
+
+@router.post("/links/delete-all")
+async def links_delete_all(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    profile: str = Query("all"),
+    platform: str = Query("all"),
+) -> RedirectResponse:
+    """Удалить все ссылки, попадающие под текущие фильтры профиля и платформы."""
+    _require_admin(request)
+    stmt = delete(Link)
+    for pred in link_filter_predicates(profile, platform):
+        stmt = stmt.where(pred)
+    await db.execute(stmt)
+    await db.commit()
+    return RedirectResponse("/admin" + build_filter_query(profile, platform), status_code=302)
 
 
 @router.post("/links/{link_id}/clicks/clear")
