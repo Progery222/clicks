@@ -112,6 +112,4 @@ def account_label_display(text: str | None) -> str | None:
         return rest[3:]
     if prefix == "youtube" and rest.startswith("channel:"):
         return rest[8:]
-    if prefix in ("tiktok", "x", "threads", "telegram", "youtube") and not rest.startswith("@"):
-        return f"@{rest}"
-    return rest
+    return rest.lstrip("@")
