@@ -93,6 +93,36 @@ curl -sS -H "Authorization: Bearer $API_TOKEN" "https://example.com/api/v1/me"
 
 ---
 
+### `POST /api/v1/links/resolve-clicks`
+
+Массовое получение **total_clicks** по URL профилей соцсетей (как в поле «Аккаунт» при создании ссылки). Для интеграции с AccountsStats: до **500** URL за запрос; совпадение label ссылки и переданного URL — после нормализации (регистр, `www`, хвостовой `/`, `@user` в пути TikTok/Threads и т.д.). Если на один аккаунт несколько коротких ссылок с тем же label — клики **суммируются**.
+
+**Тело JSON:**
+
+```json
+{
+  "profile_urls": [
+    "https://www.tiktok.com/@thecapitolverdict",
+    "https://www.instagram.com/phil.redpill/"
+  ]
+}
+```
+
+**Ответ `200`:**
+
+```json
+{
+  "items": [
+    { "profile_url": "https://www.tiktok.com/@thecapitolverdict", "total_clicks": 42 },
+    { "profile_url": "https://www.instagram.com/phil.redpill/", "total_clicks": 0 }
+  ]
+}
+```
+
+Порядок элементов совпадает с порядком в запросе (после отбрасывания пустых строк).
+
+---
+
 ### `POST /api/v1/links`
 
 Создание ссылки.

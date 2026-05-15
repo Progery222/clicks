@@ -37,6 +37,7 @@ from app.services.stats import (
     top_countries,
 )
 from app.stats_range import active_preset, form_period_dates, parse_range, stats_range
+from app.services.label_match import normalize_account_label
 from app.utils.bulk_labels import MAX_BULK_LABELS, normalize_bulk_labels
 from app.utils.csv_import import parse_links_import_csv
 from app.utils.slug import random_slug
@@ -195,6 +196,23 @@ class LinkOut(BaseModel):
 class LinksListOut(BaseModel):
     items: list[LinkOut]
     total: int
+
+
+class LinkResolveClicksIn(BaseModel):
+    """URL профилей из дашборда — вернуть total_clicks по совпадению label ссылки."""
+
+    profile_urls: list[str]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class LinkResolveClicksItem(BaseModel):
+    profile_url: str
+    total_clicks: int = 0
+
+
+class LinkResolveClicksOut(BaseModel):
+    items: list[LinkResolveClicksItem]
 
 
 class StatsOut(BaseModel):
@@ -393,6 +411,45 @@ async def list_links(
         for link in links
     ]
     return LinksListOut(items=items, total=total)
+
+
+@router.post("/links/resolve-clicks", response_model=LinkResolveClicksOut)
+async def resolve_clicks_by_profile_urls(
+    _: ApiTokenDep,
+    db: DbDep,
+    body: LinkResolveClicksIn,
+) -> LinkResolveClicksOut:
+    """Сумма total_clicks по label (нормализация URL как в дашборде). До 500 URL за запрос."""
+    raw_urls = [str(u).strip() for u in (body.profile_urls or []) if str(u).strip()]
+    if len(raw_urls) > 500:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At most 500 profile_urls per request",
+        )
+    if not raw_urls:
+        return LinkResolveClicksOut(items=[])
+
+    try:
+        counts = await dashboard_click_counts(db)
+    except Exception:
+        log.exception("api_v1 resolve_clicks: dashboard_click_counts failed")
+        counts = {}
+
+    res = await db.execute(select(Link.id, Link.label))
+    label_index: dict[str, int] = {}
+    for link_id, label in res.all():
+        key = normalize_account_label(label)
+        if not key:
+            continue
+        t, _ = counts.get(link_id, (0, 0))
+        label_index[key] = label_index.get(key, 0) + int(t)
+
+    items: list[LinkResolveClicksItem] = []
+    for pu in raw_urls:
+        key = normalize_account_label(pu)
+        total = int(label_index.get(key, 0)) if key else 0
+        items.append(LinkResolveClicksItem(profile_url=pu, total_clicks=total))
+    return LinkResolveClicksOut(items=items)
 
 
 @router.post("/links", response_model=LinkOut, status_code=status.HTTP_201_CREATED)
