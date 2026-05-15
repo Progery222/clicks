@@ -28,7 +28,14 @@
       <tbody>
         {% for row in link_rows %}
         <tr class="link-row" data-link-id="{{ row.link.id }}" data-stats-href="/admin/links/{{ row.link.id }}/stats" tabindex="0">
-          <td><span class="slug-pill"><code>{{ row.link.slug }}</code></span></td>
+          <td>
+            <button type="button" class="slug-pill slug-pill--copy js-copy-short-url"
+              data-short-url="{{ request.base_url.scheme }}://{{ request.base_url.netloc }}/r/{{ row.link.slug }}"
+              title="Нажмите, чтобы скопировать короткую ссылку"
+              aria-label="Скопировать ссылку /r/{{ row.link.slug }}">
+              <code>{{ row.link.slug }}</code>
+            </button>
+          </td>
           <td class="truncate" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>{{ row.link.label or "—" }}</td>
           <td class="truncate" title="{{ row.link.destination_url | e }}">{{ row.link.destination_url }}</td>
           <td class="num"><span class="stat-pill js-dash-total">{{ row.total }}</span></td>
@@ -113,8 +120,54 @@
   var autoOpen = {{ open_new_link_modal | default(false) | tojson }};
 
   function isActionTarget(el) {
-    return el && el.closest && el.closest("a.icon-btn, button.icon-btn, form.icon-btn-form");
+    return el && el.closest && el.closest(
+      "a.icon-btn, button.icon-btn, form.icon-btn-form, .js-copy-short-url"
+    );
   }
+
+  function copyText(text, onOk, onErr) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onOk).catch(onErr);
+      return;
+    }
+    onErr();
+  }
+
+  function fallbackCopy(text, onOk) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      onOk();
+    } catch (_e) { /* ignore */ }
+    document.body.removeChild(ta);
+  }
+
+  document.querySelectorAll(".js-copy-short-url").forEach(function (btn) {
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var url = btn.getAttribute("data-short-url");
+      if (!url) return;
+      function flashOk() {
+        var prevTitle = btn.getAttribute("title") || "";
+        btn.classList.add("slug-pill--copied");
+        btn.setAttribute("title", "Скопировано!");
+        window.setTimeout(function () {
+          btn.classList.remove("slug-pill--copied");
+          btn.setAttribute("title", prevTitle);
+        }, 1600);
+      }
+      copyText(url, flashOk, function () {
+        fallbackCopy(url, flashOk);
+      });
+    });
+  });
   document.querySelectorAll("tr.link-row").forEach(function (tr) {
     tr.addEventListener("click", function (e) {
       if (isActionTarget(e.target)) return;
