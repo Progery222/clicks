@@ -918,11 +918,6 @@ a:hover {
   gap: 0.4rem;
 }
 
-.dash-period__custom {
-  margin: 0;
-  align-items: flex-end;
-}
-
 .kpi-grid--dash {
   margin-bottom: 1rem;
 }
