@@ -135,23 +135,9 @@
       </div>
       {% endif %}
 
-      <div class="dash-split">
-        <div>
-          <h2 class="section-title section-title--sm">Referer</h2>
-          {% if top_referers %}
-          <ul class="dash-rank">
-            {% for label, cnt in top_referers %}<li><span class="dash-rank__label">{{ label }}</span><span class="dash-rank__cnt">{{ cnt }}</span></li>{% endfor %}
-          </ul>
-          {% else %}<p class="muted small">Нет данных</p>{% endif %}
-        </div>
-        <div>
-          <h2 class="section-title section-title--sm">User-Agent</h2>
-          {% if top_user_agents %}
-          <ul class="dash-rank">
-            {% for label, cnt in top_user_agents %}<li><span class="dash-rank__label" title="{{ label }}">{{ label }}</span><span class="dash-rank__cnt">{{ cnt }}</span></li>{% endfor %}
-          </ul>
-          {% else %}<p class="muted small">Нет данных</p>{% endif %}
-        </div>
+      <div class="dash-traffic-actions">
+        <button type="button" class="btn btn-secondary btn-sm js-open-traffic-modal">Referer и User-Agent</button>
+        <span class="muted small">за период: {{ period_label | default('') }}</span>
       </div>
 
       {% if link_rows is defined and link_rows %}
@@ -243,6 +229,39 @@
 </section>
 
 {% include "_profile_edit_modal.html" %}
+
+<div id="traffic-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="traffic-modal-title">
+  <div class="new-link-modal__backdrop" data-traffic-dismiss tabindex="-1"></div>
+  <div class="new-link-modal__panel new-link-modal__panel--wide">
+    <div class="new-link-modal__head">
+      <h2 id="traffic-modal-title" class="new-link-modal__title">Referer и User-Agent</h2>
+      <button type="button" class="new-link-modal__close" data-traffic-dismiss aria-label="Закрыть">×</button>
+    </div>
+    <p class="muted small new-link-modal__hint">Топ источников и браузеров за период: <strong>{{ period_label | default('') }}</strong> (с учётом фильтров профиля и платформы).</p>
+    <div class="dash-split dash-split--modal">
+      <div>
+        <h3 class="section-title section-title--sm">Referer</h3>
+        {% if top_referers %}
+        <ul class="dash-rank">
+          {% for label, cnt in top_referers %}
+          <li><span class="dash-rank__label">{{ label }}</span><span class="dash-rank__cnt">{{ cnt }}</span></li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="muted small">Нет данных за период</p>{% endif %}
+      </div>
+      <div>
+        <h3 class="section-title section-title--sm">User-Agent</h3>
+        {% if top_user_agents %}
+        <ul class="dash-rank">
+          {% for label, cnt in top_user_agents %}
+          <li><span class="dash-rank__label" title="{{ label }}">{{ label }}</span><span class="dash-rank__cnt">{{ cnt }}</span></li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="muted small">Нет данных за период</p>{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="new-link-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="new-link-modal-title">
   <div class="new-link-modal__backdrop" data-new-link-dismiss tabindex="-1"></div>
@@ -555,6 +574,31 @@
     submitBtn: bulkSubmit,
     failMsg: "Не удалось создать ссылки.",
   });
+  (function () {
+    var trafficModal = document.getElementById("traffic-modal");
+    if (!trafficModal) return;
+    function setTrafficOpen(open) {
+      trafficModal.classList.toggle("is-open", open);
+      trafficModal.setAttribute("aria-hidden", open ? "false" : "true");
+      var anyOpen = document.querySelector(".new-link-modal.is-open");
+      document.body.style.overflow = anyOpen ? "hidden" : "";
+    }
+    document.querySelectorAll(".js-open-traffic-modal").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".new-link-modal.is-open").forEach(function (m) {
+          if (m !== trafficModal) {
+            m.classList.remove("is-open");
+            m.setAttribute("aria-hidden", "true");
+          }
+        });
+        setTrafficOpen(true);
+      });
+    });
+    trafficModal.querySelectorAll("[data-traffic-dismiss]").forEach(function (el) {
+      el.addEventListener("click", function () { setTrafficOpen(false); });
+    });
+  })();
+
   var importForm = document.getElementById("import-csv-form");
   var importSubmit = importForm ? importForm.querySelector('button[type="submit"]') : null;
   wireModal({

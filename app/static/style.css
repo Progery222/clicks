@@ -941,11 +941,25 @@ a:hover {
   margin-bottom: 0.75rem;
 }
 
+.dash-traffic-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+}
+
 .dash-split {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.dash-split--modal {
+  margin-bottom: 0;
+  max-height: min(60vh, 28rem);
+  overflow: auto;
 }
 
 .dash-rank {
