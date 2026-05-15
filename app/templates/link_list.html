@@ -139,8 +139,16 @@
               <th>Платф.</th>
               <th>Аккаунт</th>
               <th>Цель</th>
-              <th class="num">Всего</th>
-              <th class="num">Сегодня</th>
+              <th class="num">
+                <a href="{{ sort_href('total') }}" class="th-sort{% if sort_by == 'total' %} th-sort--active{% endif %}" title="Сортировать по всего">
+                  Всего{% if sort_by == 'total' %}<span class="th-sort__arrow" aria-hidden="true">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>{% endif %}
+                </a>
+              </th>
+              <th class="num">
+                <a href="{{ sort_href('today') }}" class="th-sort{% if sort_by == 'today' %} th-sort--active{% endif %}" title="Сортировать по сегодня">
+                  Сегодня{% if sort_by == 'today' %}<span class="th-sort__arrow" aria-hidden="true">{% if sort_order == 'asc' %}↑{% else %}↓{% endif %}</span>{% endif %}
+                </a>
+              </th>
               <th class="num">За период</th>
               <th class="actions-head"><span class="sr-only">Действия</span></th>
             </tr>

@@ -9,7 +9,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.admin_helpers import apply_link_filters, build_filter_query
+from app.admin_helpers import (
+    apply_link_filters,
+    build_filter_query,
+    normalize_table_order,
+    normalize_table_sort,
+)
 from app.models import Click, Link
 from app.platforms import PLATFORMS, platform_color, platform_label
 from app.services.stats import (
@@ -23,6 +28,14 @@ from app.services.stats import (
 from app.stats_range import active_preset, dashboard_stats_range, form_period_dates
 
 
+def _period_query_kwargs(active_preset: str, period_from: str, period_to: str) -> dict:
+    return {
+        "preset": active_preset if active_preset != "custom" else None,
+        "date_from": period_from if active_preset == "custom" else None,
+        "date_to": period_to if active_preset == "custom" else None,
+    }
+
+
 def admin_filter_href_for(
     profile: str,
     platform: str,
@@ -30,13 +43,15 @@ def admin_filter_href_for(
     active_preset: str,
     period_from: str,
     period_to: str,
+    sort: str | None = None,
+    order: str | None = None,
 ) -> str:
     return "/admin" + build_filter_query(
         profile,
         platform,
-        preset=active_preset if active_preset != "custom" else None,
-        date_from=period_from if active_preset == "custom" else None,
-        date_to=period_to if active_preset == "custom" else None,
+        sort=sort,
+        order=order,
+        **_period_query_kwargs(active_preset, period_from, period_to),
     )
 
 
@@ -47,14 +62,60 @@ def export_qs_for(
     active_preset: str,
     period_from: str,
     period_to: str,
+    sort: str | None = None,
+    order: str | None = None,
 ) -> str:
     return build_filter_query(
         profile,
         platform,
-        preset=active_preset if active_preset != "custom" else None,
-        date_from=period_from if active_preset == "custom" else None,
-        date_to=period_to if active_preset == "custom" else None,
+        sort=sort,
+        order=order,
+        **_period_query_kwargs(active_preset, period_from, period_to),
     )
+
+
+def sort_column_href_for(
+    profile: str,
+    platform: str,
+    *,
+    active_preset: str,
+    period_from: str,
+    period_to: str,
+    column: str,
+    current_sort: str | None,
+    current_order: str | None,
+) -> str:
+    if current_sort == column:
+        next_order = "asc" if current_order == "desc" else "desc"
+    else:
+        next_order = "desc"
+    return "/admin" + build_filter_query(
+        profile,
+        platform,
+        sort=column,
+        order=next_order,
+        **_period_query_kwargs(active_preset, period_from, period_to),
+    )
+
+
+def sort_link_rows(
+    rows: list[dict],
+    *,
+    sort: str | None,
+    order: str | None,
+) -> list[dict]:
+    sort_key = normalize_table_sort(sort)
+    if not sort_key:
+        return rows
+    reverse = normalize_table_order(order, sort=sort_key) == "desc"
+
+    def key(row: dict) -> tuple:
+        primary = int(row.get("total" if sort_key == "total" else "today", 0))
+        link = row["link"]
+        created = link.created_at.timestamp() if link.created_at else 0.0
+        return (primary, created)
+
+    return sorted(rows, key=key, reverse=reverse)
 
 
 async def load_dashboard_page_data(
@@ -65,7 +126,11 @@ async def load_dashboard_page_data(
     date_from: str | None,
     date_to: str | None,
     preset: str | None,
+    sort: str | None = None,
+    order: str | None = None,
 ) -> dict:
+    sort_by = normalize_table_sort(sort)
+    sort_order = normalize_table_order(order, sort=sort_by)
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
     stmt = apply_link_filters(stmt, profile=profile, platform=platform)
     links = list((await db.execute(stmt)).scalars().all())
@@ -142,17 +207,30 @@ async def load_dashboard_page_data(
             }
         )
 
+    link_rows = sort_link_rows(link_rows, sort=sort_by, order=sort_order)
+
     filter_qs = export_qs_for(
-        profile, platform, active_preset=active, period_from=period_from, period_to=period_to
+        profile,
+        platform,
+        active_preset=active,
+        period_from=period_from,
+        period_to=period_to,
+        sort=sort_by,
+        order=sort_order,
     )
     period_hrefs = {
-        "today": "/admin" + build_filter_query(profile, platform),
-        "week": "/admin" + build_filter_query(profile, platform, preset="week"),
-        "all": "/admin" + build_filter_query(profile, platform, preset="all"),
+        "today": "/admin"
+        + build_filter_query(profile, platform, sort=sort_by, order=sort_order),
+        "week": "/admin"
+        + build_filter_query(profile, platform, preset="week", sort=sort_by, order=sort_order),
+        "all": "/admin"
+        + build_filter_query(profile, platform, preset="all", sort=sort_by, order=sort_order),
     }
 
     return {
         "link_rows": link_rows,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
         "filter_profile": profile,
         "filter_platform": platform,
         "filter_qs": filter_qs,
@@ -167,6 +245,22 @@ async def load_dashboard_page_data(
         "top_referers": referers,
         "top_user_agents": user_agents,
         "admin_filter_href": lambda prof, plat: admin_filter_href_for(
-            prof, plat, active_preset=active, period_from=period_from, period_to=period_to
+            prof,
+            plat,
+            active_preset=active,
+            period_from=period_from,
+            period_to=period_to,
+            sort=sort_by,
+            order=sort_order,
+        ),
+        "sort_href": lambda col: sort_column_href_for(
+            profile,
+            platform,
+            active_preset=active,
+            period_from=period_from,
+            period_to=period_to,
+            column=col,
+            current_sort=sort_by,
+            current_order=sort_order,
         ),
     }

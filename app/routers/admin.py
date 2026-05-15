@@ -148,6 +148,8 @@ async def dashboard(
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
+    sort: str | None = Query(None),
+    order: str | None = Query(None),
 ):
     _require_admin(request)
     try:
@@ -158,6 +160,8 @@ async def dashboard(
             date_from=date_from,
             date_to=date_to,
             preset=preset,
+            sort=sort,
+            order=order,
         )
     except Exception:
         log.exception("load_dashboard_page_data failed")

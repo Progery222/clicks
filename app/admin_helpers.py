@@ -22,6 +22,18 @@ def parse_profile_id(raw: str | None) -> uuid.UUID | None:
         return None
 
 
+def normalize_table_sort(sort: str | None) -> str | None:
+    s = (sort or "").strip().lower()
+    return s if s in ("total", "today") else None
+
+
+def normalize_table_order(order: str | None, *, sort: str | None) -> str | None:
+    if not sort:
+        return None
+    o = (order or "desc").strip().lower()
+    return o if o in ("asc", "desc") else "desc"
+
+
 def build_filter_query(
     profile: str,
     platform: str,
@@ -29,6 +41,8 @@ def build_filter_query(
     preset: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    sort: str | None = None,
+    order: str | None = None,
 ) -> str:
     params: dict[str, str] = {}
     if profile and profile != "all":
@@ -42,6 +56,12 @@ def build_filter_query(
         params["from"] = date_from.strip()
     if date_to and date_to.strip():
         params["to"] = date_to.strip()
+    sort_key = normalize_table_sort(sort)
+    order_key = normalize_table_order(order, sort=sort_key)
+    if sort_key:
+        params["sort"] = sort_key
+    if order_key:
+        params["order"] = order_key
     if not params:
         return ""
     return "?" + urlencode(params)
