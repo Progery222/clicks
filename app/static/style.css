@@ -892,7 +892,10 @@ a:hover {
 
 .links-bulk-delete {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
   padding: 1rem 0.25rem 0.5rem;
   margin-top: 0.25rem;
   border-top: 1px solid var(--border-strong);
@@ -1549,6 +1552,17 @@ form.inline {
 }
 
 .btn-danger:hover {
+  filter: brightness(1.08);
+}
+
+.btn-warning {
+  color: #fff;
+  background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.25);
+}
+
+.btn-warning:hover {
   filter: brightness(1.08);
 }
 

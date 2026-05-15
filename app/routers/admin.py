@@ -582,6 +582,39 @@ async def links_delete_all(
     return RedirectResponse("/admin" + build_filter_query(profile, platform), status_code=302)
 
 
+@router.post("/links/clicks/clear-all")
+async def clear_all_link_clicks(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    profile: str = Query("all"),
+    platform: str = Query("all"),
+    date_from: str | None = Query(None, alias="from"),
+    date_to: str | None = Query(None, alias="to"),
+    preset: str | None = Query(None),
+    sort: str | None = Query(None),
+    order: str | None = Query(None),
+) -> RedirectResponse:
+    """Удалить записи кликов по ссылкам из текущих фильтров (сами ссылки остаются)."""
+    _require_admin(request)
+    stmt = delete(Click)
+    stmt = apply_click_link_filters(stmt, profile=profile, platform=platform)
+    await db.execute(stmt)
+    await db.commit()
+    return RedirectResponse(
+        "/admin"
+        + build_filter_query(
+            profile,
+            platform,
+            preset=preset,
+            date_from=date_from,
+            date_to=date_to,
+            sort=sort,
+            order=order,
+        ),
+        status_code=302,
+    )
+
+
 @router.post("/links/{link_id}/clicks/clear")
 async def clear_link_clicks(
     request: Request,

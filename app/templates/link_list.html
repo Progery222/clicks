@@ -204,6 +204,12 @@
         </table>
       </div>
       <div class="links-bulk-delete">
+        <form method="post" action="/admin/links/clicks/clear-all{{ filter_qs | default('') }}" class="links-bulk-delete__form"
+              data-confirm-title="Очистить всю статистику кликов?"
+              data-confirm-message="{% if (filter_profile | default('all')) == 'all' and (filter_platform | default('all')) == 'all' %}Будут удалены все записи кликов по всем ссылкам.{% else %}Будут удалены все записи кликов по {{ link_rows | length }} ссылкам из текущего списка (с учётом фильтров).{% endif %} Короткие ссылки и целевые URL останутся. Восстановить статистику будет нельзя."
+              data-confirm-ok="Очистить клики">
+          <button type="submit" class="btn btn-warning">Очистить все клики</button>
+        </form>
         <form method="post" action="/admin/links/delete-all{{ filter_qs | default('') }}" class="links-bulk-delete__form"
               data-confirm-title="Удалить все ссылки?"
               data-confirm-message="Будут удалены все {{ link_rows | length }} ссылок из текущего списка (с учётом фильтров) и вся связанная статистика кликов. Восстановить данные будет нельзя."
