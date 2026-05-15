@@ -617,16 +617,18 @@ a:hover {
   min-width: min(36rem, 100%);
 }
 
-/* Колонки: цель сжимается, числа и действия не наезжают на соседей */
+/* Slug и аккаунт слева; «Цель» занимает остаток и прижата к счётчикам справа */
 .table--wide th:nth-child(1),
 .table--wide td:nth-child(1) {
-  width: 9%;
-  min-width: 4.5rem;
+  width: 5.75rem;
+  min-width: 5.75rem;
+  max-width: 5.75rem;
 }
 
 .table--wide th:nth-child(2),
 .table--wide td:nth-child(2) {
-  width: 18%;
+  width: 22%;
+  max-width: 17rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -636,6 +638,10 @@ a:hover {
 .table--wide th:nth-child(3),
 .table--wide td:nth-child(3) {
   min-width: 0;
+  width: auto;
+  text-align: right;
+  padding-left: 1.25rem;
+  padding-right: 0.35rem;
 }
 
 .table--wide th:nth-child(4),
