@@ -18,7 +18,6 @@
     <aside class="links-sidebar" aria-label="Фильтр по профилю">
       <div class="links-sidebar__search-row">
         <div class="links-sidebar__search-wrap">
-          <span class="links-sidebar__search-icon" aria-hidden="true">⌕</span>
           <input type="search" id="profile-search" class="links-sidebar__search input"
             placeholder="Поиск профилей" autocomplete="off" spellcheck="false">
         </div>
@@ -39,13 +38,31 @@
         <div class="links-sidebar__sep" role="separator"></div>
         {% for pf in profile_filters | default([]) %}
         {% if pf.id not in ['all', 'none'] %}
-        <a class="sidebar-item{% if (filter_profile | default('all')) == pf.id %} sidebar-item--active{% endif %}"
-          href="{{ admin_filter_href(pf.id, filter_platform | default('all')) }}"
+        <div class="sidebar-item-row{% if (filter_profile | default('all')) == pf.id %} sidebar-item-row--active{% endif %}"
           data-profile-label="{{ pf.name | lower }}">
-          <span class="sidebar-item__avatar" style="--av-color: {{ pf.color }}">{{ pf.name[0] }}</span>
-          <span class="sidebar-item__label">{{ pf.name }}</span>
-          <span class="sidebar-item__count">{{ pf.count }}</span>
-        </a>
+          <a class="sidebar-item{% if (filter_profile | default('all')) == pf.id %} sidebar-item--active{% endif %}"
+            href="{{ admin_filter_href(pf.id, filter_platform | default('all')) }}">
+            <span class="sidebar-item__avatar" style="--av-color: {{ pf.color }}">{{ pf.name[0] }}</span>
+            <span class="sidebar-item__label">{{ pf.name }}</span>
+            <span class="sidebar-item__count">{{ pf.count }}</span>
+          </a>
+          <div class="sidebar-item__menu-wrap">
+            <button type="button" class="sidebar-item__menu-btn" aria-label="Действия с профилем" aria-haspopup="true" aria-expanded="false">⋯</button>
+            <div class="sidebar-item__menu" hidden>
+              <button type="button" class="sidebar-item__menu-action js-profile-edit"
+                data-profile-id="{{ pf.id }}"
+                data-profile-name="{{ pf.name | e }}"
+                data-profile-color="{{ pf.color }}">Редактировать</button>
+              <form method="post" action="/admin/profiles/{{ pf.id }}/delete" class="sidebar-item__menu-form"
+                    data-confirm-title="Удалить профиль?"
+                    data-confirm-message="Профиль «{{ pf.name | e }}» будет удалён. Ссылки останутся без профиля."
+                    data-confirm-ok="Удалить">
+                <input type="hidden" name="next" value="/admin{{ filter_qs | default('') }}">
+                <button type="submit" class="sidebar-item__menu-action sidebar-item__menu-action--danger">Удалить</button>
+              </form>
+            </div>
+          </div>
+        </div>
         {% endif %}
         {% endfor %}
       </nav>
@@ -150,6 +167,8 @@
   </div>
 </section>
 
+{% include "_profile_edit_modal.html" %}
+
 <div id="new-link-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="new-link-modal-title">
   <div class="new-link-modal__backdrop" data-new-link-dismiss tabindex="-1"></div>
   <div class="new-link-modal__panel">
@@ -203,7 +222,7 @@
 
   function isActionTarget(el) {
     return el && el.closest && el.closest(
-      "a.icon-btn, button.icon-btn, form.icon-btn-form, .js-copy-short-url, .sidebar-item, .platform-pill"
+      "a.icon-btn, button.icon-btn, form.icon-btn-form, .js-copy-short-url, .sidebar-item, .sidebar-item__menu-wrap, .platform-pill"
     );
   }
 
@@ -211,13 +230,82 @@
   if (profileSearch) {
     profileSearch.addEventListener("input", function () {
       var q = profileSearch.value.trim().toLowerCase();
-      document.querySelectorAll(".sidebar-item[data-profile-label]").forEach(function (el) {
+      document.querySelectorAll(".sidebar-item-row[data-profile-label], .sidebar-item[data-profile-label]").forEach(function (el) {
         var label = el.getAttribute("data-profile-label") || "";
         var show = !q || label.indexOf(q) !== -1;
         el.style.display = show ? "" : "none";
       });
     });
   }
+
+  (function () {
+    var profileModal = document.getElementById("profile-edit-modal");
+    var profileForm = document.getElementById("profile-edit-form");
+    var profileName = document.getElementById("profile-edit-name");
+    var profileColor = document.getElementById("profile-edit-color");
+    var profileNext = document.getElementById("profile-edit-next");
+    if (!profileModal || !profileForm) return;
+
+    function closeProfileMenus(except) {
+      document.querySelectorAll(".sidebar-item__menu-wrap.is-open").forEach(function (wrap) {
+        if (except && wrap === except) return;
+        wrap.classList.remove("is-open");
+        var btn = wrap.querySelector(".sidebar-item__menu-btn");
+        var menu = wrap.querySelector(".sidebar-item__menu");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+        if (menu) menu.hidden = true;
+      });
+    }
+
+    document.querySelectorAll(".sidebar-item__menu-btn").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var wrap = btn.closest(".sidebar-item__menu-wrap");
+        if (!wrap) return;
+        var menu = wrap.querySelector(".sidebar-item__menu");
+        var open = wrap.classList.contains("is-open");
+        closeProfileMenus();
+        if (!open) {
+          wrap.classList.add("is-open");
+          btn.setAttribute("aria-expanded", "true");
+          if (menu) menu.hidden = false;
+        }
+      });
+    });
+
+    document.addEventListener("click", function (e) {
+      if (e.target.closest(".sidebar-item__menu-wrap")) return;
+      closeProfileMenus();
+    });
+
+    function setProfileModalOpen(open) {
+      profileModal.classList.toggle("is-open", open);
+      profileModal.setAttribute("aria-hidden", open ? "false" : "true");
+      var anyOpen = document.querySelector(".new-link-modal.is-open");
+      document.body.style.overflow = anyOpen ? "hidden" : "";
+    }
+
+    document.querySelectorAll(".js-profile-edit").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeProfileMenus();
+        var id = btn.getAttribute("data-profile-id");
+        if (!id) return;
+        profileForm.action = "/admin/profiles/" + id + "/edit";
+        if (profileName) profileName.value = btn.getAttribute("data-profile-name") || "";
+        if (profileColor) profileColor.value = btn.getAttribute("data-profile-color") || "#6366f1";
+        if (profileNext) profileNext.value = window.location.pathname + window.location.search;
+        setProfileModalOpen(true);
+        if (profileName) window.setTimeout(function () { profileName.focus(); }, 50);
+      });
+    });
+
+    profileModal.querySelectorAll("[data-profile-edit-dismiss]").forEach(function (el) {
+      el.addEventListener("click", function () { setProfileModalOpen(false); });
+    });
+  })();
 
   function copyText(text, onOk, onErr) {
     if (navigator.clipboard && navigator.clipboard.writeText) {

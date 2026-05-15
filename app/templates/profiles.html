@@ -50,10 +50,17 @@
           <td class="num">{{ profile_counts.get(p.id|string, 0) }}</td>
           <td class="actions actions--icons">
             <a class="btn btn-sm" href="/admin?profile={{ p.id }}">Ссылки</a>
+            <button type="button" class="icon-btn js-profile-edit" title="Редактировать" aria-label="Редактировать"
+              data-profile-id="{{ p.id }}"
+              data-profile-name="{{ p.name | e }}"
+              data-profile-color="{{ p.color }}">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            </button>
             <form method="post" action="/admin/profiles/{{ p.id }}/delete" class="inline icon-btn-form"
                   data-confirm-title="Удалить профиль?"
                   data-confirm-message="Профиль «{{ p.name }}» будет удалён. Ссылки останутся без профиля."
                   data-confirm-ok="Удалить">
+              <input type="hidden" name="next" value="/admin/profiles">
               <button type="submit" class="icon-btn icon-btn--danger" title="Удалить" aria-label="Удалить">×</button>
             </form>
           </td>
@@ -68,4 +75,40 @@
   <p class="muted">Пока нет профилей. Создайте первый выше.</p>
 </section>
 {% endif %}
+
+{% include "_profile_edit_modal.html" %}
+
+<script>
+(function () {
+  var profileModal = document.getElementById("profile-edit-modal");
+  var profileForm = document.getElementById("profile-edit-form");
+  var profileName = document.getElementById("profile-edit-name");
+  var profileColor = document.getElementById("profile-edit-color");
+  var profileNext = document.getElementById("profile-edit-next");
+  if (!profileModal || !profileForm) return;
+
+  function setOpen(open) {
+    profileModal.classList.toggle("is-open", open);
+    profileModal.setAttribute("aria-hidden", open ? "false" : "true");
+    document.body.style.overflow = open ? "hidden" : "";
+  }
+
+  document.querySelectorAll(".js-profile-edit").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var id = btn.getAttribute("data-profile-id");
+      if (!id) return;
+      profileForm.action = "/admin/profiles/" + id + "/edit";
+      if (profileName) profileName.value = btn.getAttribute("data-profile-name") || "";
+      if (profileColor) profileColor.value = btn.getAttribute("data-profile-color") || "#6366f1";
+      if (profileNext) profileNext.value = "/admin/profiles";
+      setOpen(true);
+      if (profileName) window.setTimeout(function () { profileName.focus(); }, 50);
+    });
+  });
+
+  profileModal.querySelectorAll("[data-profile-edit-dismiss]").forEach(function (el) {
+    el.addEventListener("click", function () { setOpen(false); });
+  });
+})();
+</script>
 {% endblock %}

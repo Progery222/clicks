@@ -1,0 +1,19 @@
+<div id="profile-edit-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="profile-edit-modal-title">
+  <div class="new-link-modal__backdrop" data-profile-edit-dismiss tabindex="-1"></div>
+  <div class="new-link-modal__panel">
+    <div class="new-link-modal__head">
+      <h2 id="profile-edit-modal-title" class="new-link-modal__title">Редактировать профиль</h2>
+      <button type="button" class="new-link-modal__close" data-profile-edit-dismiss aria-label="Закрыть">×</button>
+    </div>
+    <form id="profile-edit-form" method="post" action="" class="stack">
+      <input type="hidden" name="next" id="profile-edit-next" value="">
+      <label class="field-label">Название
+        <input class="input" type="text" name="name" id="profile-edit-name" required maxlength="255">
+      </label>
+      <label class="field-label">Цвет
+        <input class="input input--color" type="color" name="color" id="profile-edit-color" value="#6366f1">
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">Сохранить</button>
+    </form>
+  </div>
+</div>

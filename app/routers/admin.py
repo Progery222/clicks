@@ -260,16 +260,45 @@ async def profile_create(
     return RedirectResponse("/admin/profiles", status_code=302)
 
 
+@router.post("/profiles/{profile_id}/edit")
+async def profile_edit(
+    request: Request,
+    profile_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    name: str = Form(...),
+    color: str = Form("#6366f1"),
+    next: str = Form("/admin"),
+) -> RedirectResponse:
+    _require_admin(request)
+    p = await db.get(Profile, profile_id)
+    if p is None:
+        raise HTTPException(404)
+    c = (color or "#6366f1").strip()
+    if not c.startswith("#") or len(c) > 7:
+        c = "#6366f1"
+    p.name = name.strip()
+    p.color = c
+    await db.commit()
+    dest = (next or "/admin").strip()
+    if not dest.startswith("/admin"):
+        dest = "/admin"
+    return RedirectResponse(dest, status_code=302)
+
+
 @router.post("/profiles/{profile_id}/delete")
 async def profile_delete(
     request: Request,
     profile_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    next: str = Form("/admin/profiles"),
 ) -> RedirectResponse:
     _require_admin(request)
     await db.execute(delete(Profile).where(Profile.id == profile_id))
     await db.commit()
-    return RedirectResponse("/admin/profiles", status_code=302)
+    dest = (next or "/admin/profiles").strip()
+    if not dest.startswith("/admin"):
+        dest = "/admin/profiles"
+    return RedirectResponse(dest, status_code=302)
 
 
 @router.get("/links/new")
