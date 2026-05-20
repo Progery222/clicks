@@ -107,12 +107,16 @@ def stats_range(
     return day_start(today), day_start(today + timedelta(days=1))
 
 
+DASHBOARD_DEFAULT_PRESET = "all"
+
+
 def dashboard_stats_range(
     date_from: str | None,
     date_to: str | None,
     preset: str | None,
     *,
     earliest: datetime | None = None,
+    default_preset: str = DASHBOARD_DEFAULT_PRESET,
 ) -> tuple[datetime, datetime]:
     """Диапазон для главной админки (без привязки к одной ссылке)."""
     from datetime import date as date_cls
@@ -129,7 +133,7 @@ def dashboard_stats_range(
     def day_start(d: date_cls) -> datetime:
         return datetime.combine(d, time_cls.min, tzinfo=tz)
 
-    p = (preset or "").strip().lower()
+    p = (preset or "").strip().lower() or default_preset
     if p == "week":
         start_d = today - timedelta(days=6)
         return day_start(start_d), day_start(today + timedelta(days=1))
@@ -147,6 +151,8 @@ def dashboard_stats_range(
         if start >= end:
             start = day_start(today)
         return start, end
+    if p == "today":
+        return day_start(today), day_start(today + timedelta(days=1))
     return day_start(today), day_start(today + timedelta(days=1))
 
 

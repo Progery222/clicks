@@ -50,7 +50,7 @@ def build_filter_query(
     if platform and platform != "all":
         params["platform"] = platform
     p = (preset or "").strip().lower()
-    if p and p not in ("", "today"):
+    if p and p not in ("", "all"):
         params["preset"] = p
     if date_from and date_from.strip():
         params["from"] = date_from.strip()

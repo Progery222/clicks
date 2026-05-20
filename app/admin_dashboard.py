@@ -26,7 +26,12 @@ from app.services.stats import (
     top_referers,
     top_user_agents,
 )
-from app.stats_range import active_preset, dashboard_stats_range, form_period_dates
+from app.stats_range import (
+    DASHBOARD_DEFAULT_PRESET,
+    active_preset,
+    dashboard_stats_range,
+    form_period_dates,
+)
 
 
 def _period_query_kwargs(active_preset: str, period_from: str, period_to: str) -> dict:
@@ -140,8 +145,10 @@ async def load_dashboard_page_data(
     earliest_row = await db.execute(select(func.min(Link.created_at)))
     earliest = earliest_row.scalar_one_or_none()
 
-    active = active_preset(date_from, date_to, preset)
-    start, end = dashboard_stats_range(date_from, date_to, preset, earliest=earliest)
+    active = active_preset(date_from, date_to, preset, default=DASHBOARD_DEFAULT_PRESET)
+    start, end = dashboard_stats_range(
+        date_from, date_to, preset, earliest=earliest, default_preset=DASHBOARD_DEFAULT_PRESET
+    )
     period_from, period_to = form_period_dates(start, end)
 
     try:
@@ -222,11 +229,13 @@ async def load_dashboard_page_data(
     )
     period_hrefs = {
         "today": "/admin"
-        + build_filter_query(profile, platform, sort=sort_by, order=sort_order),
+        + build_filter_query(
+            profile, platform, preset="today", sort=sort_by, order=sort_order
+        ),
         "week": "/admin"
         + build_filter_query(profile, platform, preset="week", sort=sort_by, order=sort_order),
         "all": "/admin"
-        + build_filter_query(profile, platform, preset="all", sort=sort_by, order=sort_order),
+        + build_filter_query(profile, platform, sort=sort_by, order=sort_order),
     }
 
     return {
