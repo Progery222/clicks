@@ -11,6 +11,7 @@
       <button type="button" class="btn btn-primary js-open-new-link-modal">+ Создать ссылку</button>
       <button type="button" class="btn js-open-bulk-link-modal">Массовое создание</button>
       <button type="button" class="btn js-open-import-csv-modal">Импорт CSV</button>
+      <button type="button" class="btn js-open-bulk-dest-modal">Сменить цель</button>
       <a class="btn" href="/admin/export/links.csv{{ filter_qs | default('') }}">Ссылки CSV</a>
       <a class="btn" href="/admin/export/clicks.csv{{ filter_qs | default('') }}">Клики CSV</a>
     </div>
@@ -311,6 +312,61 @@
   </div>
 </div>
 
+<div id="bulk-dest-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="bulk-dest-modal-title">
+  <div class="new-link-modal__backdrop" data-bulk-dest-dismiss tabindex="-1"></div>
+  <div class="new-link-modal__panel new-link-modal__panel--wide new-link-modal__panel--bulk-dest">
+    <div class="new-link-modal__head">
+      <h2 id="bulk-dest-modal-title" class="new-link-modal__title">Сменить целевой URL</h2>
+      <button type="button" class="new-link-modal__close" data-bulk-dest-dismiss aria-label="Закрыть">×</button>
+    </div>
+    <p class="muted small new-link-modal__hint">Отметьте ссылки и укажите новый целевой URL. Slug и статистика кликов не меняются.</p>
+    <p id="bulk-dest-modal-error" class="new-link-modal__error error error--box" hidden></p>
+
+    <div class="bulk-dest-filters">
+      <label class="field-label bulk-dest-filters__profile">Профиль
+        <select id="bulk-dest-profile" class="input">
+          {% for pf in profile_filters | default([]) %}
+          <option value="{{ pf.id }}">{{ pf.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="bulk-dest-filters__platforms">
+        <span class="field-label">Платформа</span>
+        <div class="bulk-dest-platforms" id="bulk-dest-platforms" role="group" aria-label="Фильтр платформы">
+          {% for pl in platform_filters | default([]) %}
+          <button type="button" class="platform-pill bulk-dest-platform-pill{% if pl.id == 'all' %} platform-pill--active{% endif %}"
+            data-platform="{{ pl.id }}">
+            {% if pl.color %}<span class="platform-pill__dot" style="background: {{ pl.color }}"></span>{% endif %}
+            <span class="platform-pill__label">{{ pl.label }}</span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="bulk-dest-toolbar">
+      <label class="bulk-dest-select-all">
+        <input type="checkbox" id="bulk-dest-select-all" aria-label="Выбрать все в списке">
+        <span>Выбрать все</span>
+      </label>
+      <span class="muted small" id="bulk-dest-count">0 выбрано</span>
+      <span class="muted small bulk-dest-toolbar__total" id="bulk-dest-list-total"></span>
+    </div>
+
+    <div id="bulk-dest-list" class="bulk-dest-list" role="list" aria-busy="false">
+      <p class="muted bulk-dest-list__placeholder">Загрузка…</p>
+    </div>
+
+    <form id="bulk-dest-form" method="post" action="/admin/links/bulk-destination" class="stack bulk-dest-form">
+      <label class="field-label">Новый целевой URL
+        <input class="input" type="url" name="destination_url" required autocomplete="url"
+          placeholder="https://rumble.com/c/...">
+      </label>
+      <button type="submit" class="btn btn-primary btn-block" id="bulk-dest-submit" disabled>Обновить выбранные</button>
+    </form>
+  </div>
+</div>
+
 <div id="import-csv-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="import-csv-modal-title">
   <div class="new-link-modal__backdrop" data-import-csv-dismiss tabindex="-1"></div>
   <div class="new-link-modal__panel">
@@ -597,6 +653,210 @@
     });
     trafficModal.querySelectorAll("[data-traffic-dismiss]").forEach(function (el) {
       el.addEventListener("click", function () { setTrafficOpen(false); });
+    });
+  })();
+
+  (function () {
+    var modal = document.getElementById("bulk-dest-modal");
+    var listEl = document.getElementById("bulk-dest-list");
+    var form = document.getElementById("bulk-dest-form");
+    var errEl = document.getElementById("bulk-dest-modal-error");
+    var profileSel = document.getElementById("bulk-dest-profile");
+    var platformBar = document.getElementById("bulk-dest-platforms");
+    var selectAll = document.getElementById("bulk-dest-select-all");
+    var countEl = document.getElementById("bulk-dest-count");
+    var totalEl = document.getElementById("bulk-dest-list-total");
+    var submitBtn = document.getElementById("bulk-dest-submit");
+    if (!modal || !listEl || !form || !errEl) return;
+
+    var filterProfile = "all";
+    var filterPlatform = "all";
+    var loading = false;
+
+    function esc(s) {
+      var d = document.createElement("div");
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+
+    function setOpen(open) {
+      modal.classList.toggle("is-open", open);
+      modal.setAttribute("aria-hidden", open ? "false" : "true");
+      var anyOpen = document.querySelector(".new-link-modal.is-open");
+      document.body.style.overflow = anyOpen ? "hidden" : "";
+      if (!open) {
+        form.reset();
+        listEl.innerHTML = "<p class=\"muted bulk-dest-list__placeholder\">Загрузка…</p>";
+        if (selectAll) selectAll.checked = false;
+        updateCount();
+        errEl.textContent = "";
+        errEl.hidden = true;
+        if (submitBtn) submitBtn.disabled = true;
+      } else {
+        loadList();
+        var urlInput = form.querySelector("input[name=destination_url]");
+        if (urlInput) window.setTimeout(function () { urlInput.focus(); }, 50);
+      }
+    }
+
+    function updateCount() {
+      var n = listEl.querySelectorAll('input[name="link_ids"]:checked').length;
+      if (countEl) countEl.textContent = n + " выбрано";
+      if (submitBtn) {
+        submitBtn.disabled = n === 0;
+        submitBtn.textContent = n ? ("Обновить выбранные (" + n + ")") : "Обновить выбранные";
+      }
+      if (selectAll) {
+        var boxes = listEl.querySelectorAll('input[name="link_ids"]');
+        selectAll.checked = boxes.length > 0 && n === boxes.length;
+        selectAll.indeterminate = n > 0 && n < boxes.length;
+      }
+    }
+
+    function renderList(items) {
+      if (!items.length) {
+        listEl.innerHTML = "<p class=\"muted bulk-dest-list__placeholder\">Нет ссылок по выбранным фильтрам.</p>";
+        if (totalEl) totalEl.textContent = "";
+        if (selectAll) selectAll.checked = false;
+        updateCount();
+        return;
+      }
+      if (totalEl) totalEl.textContent = "В списке: " + items.length;
+      var html = "";
+      items.forEach(function (item) {
+        var meta = [];
+        if (item.profile_name) meta.push(esc(item.profile_name));
+        if (item.platform_label) meta.push(esc(item.platform_label));
+        var destShort = item.destination_url;
+        if (destShort.length > 48) destShort = destShort.slice(0, 45) + "…";
+        html += "<label class=\"bulk-dest-row\" role=\"listitem\">" +
+          "<input type=\"checkbox\" name=\"link_ids\" value=\"" + esc(item.id) + "\">" +
+          "<span class=\"bulk-dest-row__body\">" +
+          "<span class=\"bulk-dest-row__title\"><code>" + esc(item.slug) + "</code> · " + esc(item.account) + "</span>" +
+          (meta.length ? "<span class=\"bulk-dest-row__meta muted small\">" + meta.join(" · ") + "</span>" : "") +
+          "<span class=\"bulk-dest-row__dest muted small\" title=\"" + esc(item.destination_url) + "\">" + esc(destShort) + "</span>" +
+          "</span></label>";
+      });
+      listEl.innerHTML = html;
+      listEl.querySelectorAll('input[name="link_ids"]').forEach(function (cb) {
+        cb.addEventListener("change", updateCount);
+      });
+      if (selectAll) selectAll.checked = false;
+      updateCount();
+    }
+
+    function loadList() {
+      if (loading) return;
+      loading = true;
+      listEl.setAttribute("aria-busy", "true");
+      listEl.innerHTML = "<p class=\"muted bulk-dest-list__placeholder\">Загрузка…</p>";
+      if (totalEl) totalEl.textContent = "";
+      var q = new URLSearchParams({ profile: filterProfile, platform: filterPlatform });
+      fetch("/admin/api/links-picker?" + q.toString(), { credentials: "same-origin" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("bad status");
+          return r.json();
+        })
+        .then(function (data) {
+          renderList((data && data.items) ? data.items : []);
+        })
+        .catch(function () {
+          listEl.innerHTML = "<p class=\"muted bulk-dest-list__placeholder\">Не удалось загрузить список.</p>";
+        })
+        .finally(function () {
+          loading = false;
+          listEl.setAttribute("aria-busy", "false");
+        });
+    }
+
+    if (profileSel) {
+      profileSel.addEventListener("change", function () {
+        filterProfile = profileSel.value || "all";
+        loadList();
+      });
+    }
+    if (platformBar) {
+      platformBar.addEventListener("click", function (e) {
+        var btn = e.target.closest(".bulk-dest-platform-pill");
+        if (!btn) return;
+        filterPlatform = btn.getAttribute("data-platform") || "all";
+        platformBar.querySelectorAll(".bulk-dest-platform-pill").forEach(function (b) {
+          b.classList.toggle("platform-pill--active", b === btn);
+        });
+        loadList();
+      });
+    }
+    if (selectAll) {
+      selectAll.addEventListener("change", function () {
+        var on = selectAll.checked;
+        listEl.querySelectorAll('input[name="link_ids"]').forEach(function (cb) {
+          cb.checked = on;
+        });
+        updateCount();
+      });
+    }
+
+    document.querySelectorAll(".js-open-bulk-dest-modal").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".new-link-modal.is-open").forEach(function (m) {
+          if (m !== modal) {
+            m.classList.remove("is-open");
+            m.setAttribute("aria-hidden", "true");
+          }
+        });
+        filterProfile = "all";
+        filterPlatform = "all";
+        if (profileSel) profileSel.value = "all";
+        if (platformBar) {
+          platformBar.querySelectorAll(".bulk-dest-platform-pill").forEach(function (b) {
+            b.classList.toggle("platform-pill--active", (b.getAttribute("data-platform") || "all") === "all");
+          });
+        }
+        setOpen(true);
+      });
+    });
+    modal.querySelectorAll("[data-bulk-dest-dismiss]").forEach(function (el) {
+      el.addEventListener("click", function () { setOpen(false); });
+    });
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var checked = listEl.querySelectorAll('input[name="link_ids"]:checked');
+      if (!checked.length) {
+        errEl.textContent = "Выберите хотя бы одну ссылку.";
+        errEl.hidden = false;
+        return;
+      }
+      errEl.hidden = true;
+      errEl.textContent = "";
+      if (submitBtn) submitBtn.disabled = true;
+      var fd = new FormData(form);
+      checked.forEach(function (cb) { fd.append("link_ids", cb.value); });
+      fetch(form.action, {
+        method: "POST",
+        body: fd,
+        headers: { "X-Modal-Form": "1", "Accept": "application/json" },
+        credentials: "same-origin",
+      })
+        .then(function (res) { return res.json().then(function (data) { return { res: res, data: data }; }); })
+        .then(function (_ref) {
+          var res = _ref.res;
+          var data = _ref.data;
+          if (res.ok && data.redirect) {
+            window.location.href = data.redirect;
+            return;
+          }
+          if (submitBtn) submitBtn.disabled = false;
+          updateCount();
+          errEl.textContent = (data && data.error) ? data.error : "Не удалось обновить ссылки.";
+          errEl.hidden = false;
+        })
+        .catch(function () {
+          if (submitBtn) submitBtn.disabled = false;
+          updateCount();
+          errEl.textContent = "Ошибка сети. Попробуйте ещё раз.";
+          errEl.hidden = false;
+        });
     });
   })();
 

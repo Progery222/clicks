@@ -2,6 +2,7 @@ import json
 import logging
 import uuid
 from collections.abc import Iterator
+from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -9,7 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -31,6 +32,7 @@ from app.csv_stream import stream_csv
 from app.database import get_db
 from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_color, platform_label
+from app.services.label_match import account_label_display
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.security import verify_env_password
 from app.services.ip_lockout import (
@@ -61,6 +63,7 @@ from app.utils.slug import random_slug
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
+MAX_BULK_DEST_UPDATE = 500
 
 _templates_dir = str(Path(__file__).resolve().parent.parent / "templates")
 templates = Jinja2Templates(directory=_templates_dir)
@@ -443,6 +446,91 @@ async def link_bulk_post(
     redirect = "/admin" + build_filter_query(prof_q, "all")
     if modal:
         return JSONResponse({"redirect": redirect, "created": len(label_list)})
+    return RedirectResponse(redirect, status_code=302)
+
+
+@router.get("/api/links-picker")
+async def api_links_picker(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    profile: str = Query("all"),
+    platform: str = Query("all"),
+) -> JSONResponse:
+    """Ссылки для модалки массовой смены целевого URL (фильтр профиля и платформы)."""
+    _require_admin(request)
+    stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
+    stmt = apply_link_filters(stmt, profile=profile, platform=platform)
+    links = list((await db.execute(stmt)).scalars().all())
+    items = []
+    for link in links:
+        items.append(
+            {
+                "id": str(link.id),
+                "slug": link.slug,
+                "account": account_label_display(link.label) or "—",
+                "profile_id": str(link.profile_id) if link.profile_id else None,
+                "profile_name": link.profile.name if link.profile else None,
+                "platform": link.platform,
+                "platform_label": platform_label(link.platform) if link.platform else None,
+                "destination_url": link.destination_url,
+            }
+        )
+    return JSONResponse({"items": items})
+
+
+@router.post("/links/bulk-destination")
+async def links_bulk_destination(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    destination_url: str = Form(...),
+    link_ids: Annotated[list[str], Form()] = [],
+):
+    """Обновить целевой URL у выбранных ссылок."""
+    _require_admin(request)
+    modal = (request.headers.get("x-modal-form") or "").strip() == "1"
+
+    if not _valid_url(destination_url):
+        msg = "URL должен начинаться с http:// или https://"
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
+        raise HTTPException(status_code=400, detail=msg)
+
+    raw_ids = [x.strip() for x in link_ids if x and x.strip()]
+    if not raw_ids:
+        msg = "Выберите хотя бы одну ссылку."
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
+        raise HTTPException(status_code=400, detail=msg)
+    if len(raw_ids) > MAX_BULK_DEST_UPDATE:
+        msg = f"Не больше {MAX_BULK_DEST_UPDATE} ссылок за раз."
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
+        raise HTTPException(status_code=400, detail=msg)
+
+    try:
+        ids = [uuid.UUID(x) for x in raw_ids]
+    except ValueError:
+        msg = "Некорректный идентификатор ссылки."
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
+        raise HTTPException(status_code=400, detail=msg)
+
+    unique_ids = list(dict.fromkeys(ids))
+    dest = destination_url.strip()
+    result = await db.execute(
+        update(Link).where(Link.id.in_(unique_ids)).values(destination_url=dest)
+    )
+    await db.commit()
+    updated = int(result.rowcount or 0)
+    if updated == 0:
+        msg = "Не найдено ссылок для обновления."
+        if modal:
+            return JSONResponse({"error": msg}, status_code=400)
+        raise HTTPException(status_code=404, detail=msg)
+
+    redirect = "/admin"
+    if modal:
+        return JSONResponse({"redirect": redirect, "updated": updated})
     return RedirectResponse(redirect, status_code=302)
 
 
