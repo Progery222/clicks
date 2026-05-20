@@ -51,14 +51,18 @@ def parse_range(from_s: str | None, to_s: str | None) -> tuple[datetime, datetim
 
 
 def active_preset(
-    date_from: str | None, date_to: str | None, preset: str | None
+    date_from: str | None,
+    date_to: str | None,
+    preset: str | None,
+    *,
+    default: str = "today",
 ) -> str:
     if (date_from and date_from.strip()) or (date_to and date_to.strip()):
         return "custom"
     p = (preset or "").strip().lower()
-    if p in ("week", "all"):
+    if p in ("week", "all", "today"):
         return p
-    return "today"
+    return default
 
 
 def stats_range(
@@ -66,6 +70,8 @@ def stats_range(
     date_from: str | None,
     date_to: str | None,
     preset: str | None,
+    *,
+    default_preset: str = "today",
 ) -> tuple[datetime, datetime]:
     from datetime import date as date_cls
     from datetime import time as time_cls
@@ -81,7 +87,7 @@ def stats_range(
     def day_start(d: date_cls) -> datetime:
         return datetime.combine(d, time_cls.min, tzinfo=tz)
 
-    p = (preset or "").strip().lower()
+    p = (preset or "").strip().lower() or default_preset
     if p == "week":
         start_d = today - timedelta(days=6)
         return day_start(start_d), day_start(today + timedelta(days=1))
@@ -96,6 +102,8 @@ def stats_range(
         if start >= end:
             start = day_start(today)
         return start, end
+    if p == "today":
+        return day_start(today), day_start(today + timedelta(days=1))
     return day_start(today), day_start(today + timedelta(days=1))
 
 

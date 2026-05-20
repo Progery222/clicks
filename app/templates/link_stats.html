@@ -106,7 +106,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var datePanel = document.getElementById("stats-date-panel");
 
   function readRange() {
-    var preset = (section.getAttribute("data-active-preset") || "today").toLowerCase();
+    var preset = (section.getAttribute("data-active-preset") || "all").toLowerCase();
     if (preset !== "custom") {
       return { preset: preset };
     }
@@ -181,8 +181,8 @@ document.addEventListener("DOMContentLoaded", function () {
   if (presetBtn && presetBtn.dataset.linkId) {
     presetBtn.addEventListener("click", function () {
       var order = ["today", "week", "all"];
-      var cur = (presetBtn.dataset.preset || "today").toLowerCase();
-      if (cur === "custom") cur = "today";
+      var cur = (presetBtn.dataset.preset || "all").toLowerCase();
+      if (cur === "custom") cur = "all";
       var ix = order.indexOf(cur);
       if (ix < 0) ix = 0;
       var next = order[(ix + 1) % order.length];

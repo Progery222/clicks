@@ -645,7 +645,9 @@ async def link_stats_data(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
-    start, end = stats_range(link, date_from, date_to, preset)
+    start, end = stats_range(
+        link, date_from, date_to, preset, default_preset="all"
+    )
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
     geoip_db_present = (
@@ -676,8 +678,10 @@ async def link_stats(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
-    start, end = stats_range(link, date_from, date_to, preset)
-    active = active_preset(date_from, date_to, preset)
+    start, end = stats_range(
+        link, date_from, date_to, preset, default_preset="all"
+    )
+    active = active_preset(date_from, date_to, preset, default="all")
     period_from, period_to = form_period_dates(start, end)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
