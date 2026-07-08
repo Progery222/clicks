@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from html import unescape
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -38,6 +39,16 @@ _OG_IMAGE_PATTERNS = (
 )
 
 _DOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$", re.I)
+
+
+_TIKTOK_AVATAR_RE = re.compile(
+    r'"(?:avatarLarger|avatarMedium|avatarThumb)"\s*:\s*"(https:[^"]+)"',
+    re.I,
+)
+
+
+def _decode_embedded_cdn_url(raw: str) -> str:
+    return unescape(raw.replace("\\u002F", "/").replace("\\/", "/"))
 
 
 def _first_path_segment(path: str) -> str | None:
@@ -112,7 +123,7 @@ def _extract_og_image(html: str, base_url: str) -> str | None:
         if m:
             raw = m.group(1).strip()
             if raw:
-                return urljoin(base_url, raw)
+                return unescape(urljoin(base_url, raw))
     return None
 
 
@@ -187,6 +198,22 @@ async def _try_tiktok_oembed(client: httpx.AsyncClient, profile_url: str) -> str
     return None
 
 
+async def _try_tiktok_avatar_html(client: httpx.AsyncClient, profile_url: str) -> str | None:
+    if "tiktok.com" not in profile_url.lower():
+        return None
+    try:
+        r = await client.get(profile_url, timeout=15.0)
+        if r.status_code != 200:
+            return None
+        m = _TIKTOK_AVATAR_RE.search(r.text[:900_000])
+        if not m:
+            return None
+        return _decode_embedded_cdn_url(m.group(1))
+    except Exception as exc:
+        log.debug("tiktok avatar html failed for %s: %s", profile_url, exc)
+    return None
+
+
 async def resolve_account_avatar_url(
     label: str | None,
     platform: str | None,
@@ -206,6 +233,9 @@ async def resolve_account_avatar_url(
         oembed = await _try_tiktok_oembed(client, profile_url)
         if oembed:
             return oembed
+        tiktok_pic = await _try_tiktok_avatar_html(client, profile_url)
+        if tiktok_pic:
+            return tiktok_pic
 
     tg_user = _telegram_username(label, platform)
     if tg_user:
@@ -216,7 +246,7 @@ async def resolve_account_avatar_url(
     profile_url = account_profile_url(label, platform)
     if profile_url:
         og = await _fetch_og_image(client, profile_url)
-        if og and await _url_is_image(client, og):
+        if og:
             return og
 
     domain = _domain_from_label(label)
