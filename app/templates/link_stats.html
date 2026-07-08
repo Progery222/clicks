@@ -3,10 +3,17 @@
 {% block content %}
 <section class="card" data-stats-link-id="{{ link.id }}" data-active-preset="{{ active_preset }}">
   <div class="row between wrap stats-head">
-    <div>
-      <h1 class="page-title">{{ link.label or link.slug }}</h1>
-      <p class="muted stats-meta">Короткая ссылка: <a class="link-inline" href="{{ short_url }}">{{ short_url }}</a></p>
-      <p class="muted stats-meta">Цель: <a class="link-inline" href="{{ link.destination_url }}">{{ link.destination_url }}</a></p>
+    <div class="stats-head__main">
+      <div class="stats-head__identity">
+        {% with avatar_url=link.account_avatar_url, display=link.label or link.slug, size='lg' %}
+        {% include "_account_avatar.html" %}
+        {% endwith %}
+        <div class="stats-head__text">
+          <h1 class="page-title">{{ link.label or link.slug }}</h1>
+          <p class="muted stats-meta">Короткая ссылка: <a class="link-inline" href="{{ short_url }}">{{ short_url }}</a></p>
+          <p class="muted stats-meta">Цель: <a class="link-inline" href="{{ link.destination_url }}">{{ link.destination_url }}</a></p>
+        </div>
+      </div>
     </div>
     <div class="row wrap">
       <a class="btn btn-secondary" href="/admin/links/{{ link.id }}/edit">Правка</a>

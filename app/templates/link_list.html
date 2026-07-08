@@ -208,7 +208,14 @@
                 </span>
                 {% else %}—{% endif %}
               </td>
-              <td class="truncate" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>{{ row.account_display or "—" }}</td>
+              <td class="truncate account-cell" {% if row.link.label %}title="{{ row.link.label | e }}"{% endif %}>
+                <span class="account-cell__inner">
+                  {% with avatar_url=row.account_avatar_url, display=row.account_display, size='sm' %}
+                  {% include "_account_avatar.html" %}
+                  {% endwith %}
+                  <span class="account-cell__name">{{ row.account_display or "—" }}</span>
+                </span>
+              </td>
               <td class="num"><span class="stat-pill js-dash-total">{{ row.total }}</span></td>
               <td class="num"><span class="stat-pill stat-pill--accent js-dash-today">{{ row.today }}</span></td>
               <td class="num"><span class="stat-pill js-dash-period">{{ row.period_clicks | default(0) }}</span></td>

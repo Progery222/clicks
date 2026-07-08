@@ -33,6 +33,7 @@ from app.database import get_db
 from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_color, platform_label
 from app.services.label_match import account_label_display
+from app.services.account_avatar import backfill_link_avatars, refresh_link_avatar
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.security import verify_env_password
 from app.services.ip_lockout import (
@@ -411,6 +412,7 @@ async def link_new_post(
     apply_link_label(link, label)
     apply_link_profile(link, parse_profile_id(profile_id))
     db.add(link)
+    await refresh_link_avatar(db, link)
     await db.commit()
     dest = f"/admin/links/{link.id}/stats"
     if modal:
@@ -649,6 +651,7 @@ async def link_edit_post(
     link.destination_url = destination_url.strip()
     apply_link_label(link, label)
     apply_link_profile(link, parse_profile_id(profile_id))
+    await refresh_link_avatar(db, link)
     await db.commit()
     return RedirectResponse(f"/admin/links/{link.id}/stats", status_code=302)
 
@@ -786,6 +789,9 @@ async def link_stats(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
+    if link.label and not link.account_avatar_url:
+        await refresh_link_avatar(db, link)
+        await db.commit()
     start, end = stats_range(
         link, date_from, date_to, preset, default_preset="all"
     )

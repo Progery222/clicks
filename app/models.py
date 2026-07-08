@@ -40,6 +40,7 @@ class Link(Base):
     slug: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     destination_url: Mapped[str] = mapped_column(Text, nullable=False)
     label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    account_avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     platform: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     profile_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

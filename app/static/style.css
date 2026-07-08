@@ -817,6 +817,82 @@ a:hover {
   background: rgba(255, 255, 255, 0.025);
 }
 
+.account-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-strong);
+  position: relative;
+}
+
+.account-avatar--lg {
+  width: 4rem;
+  height: 4rem;
+}
+
+.account-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.account-avatar__letter {
+  display: none;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  background: rgba(99, 102, 241, 0.18);
+}
+
+.account-avatar--lg .account-avatar__letter {
+  font-size: 1.35rem;
+}
+
+.account-avatar--letter .account-avatar__letter {
+  display: inline-flex;
+}
+
+.account-cell__inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.account-cell__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-head__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.stats-head__text {
+  min-width: 0;
+}
+
+.stats-head__text .page-title {
+  margin-bottom: 0.35rem;
+}
+
 .links-sidebar__add {
   display: inline-flex;
   align-items: center;

@@ -27,6 +27,7 @@ from app.admin_helpers import (
 from app.database import get_db
 from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_label
+from app.services.account_avatar import refresh_link_avatar
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.services.ip_lockout import clear_api_failures, client_ip, record_api_token_failure
 from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_path
@@ -468,6 +469,7 @@ async def create_link(_: ApiTokenDep, db: DbDep, body: LinkCreate) -> LinkOut:
     apply_link_label(link, body.label)
     apply_link_profile(link, pid)
     db.add(link)
+    await refresh_link_avatar(db, link)
     await db.commit()
     await db.refresh(link)
     return LinkOut.from_link(link)
@@ -573,6 +575,7 @@ async def patch_link(
     if "label" in data:
         raw = data["label"]
         apply_link_label(link, None if raw is None else str(raw))
+        await refresh_link_avatar(db, link)
     if body.clear_profile:
         apply_link_profile(link, None)
     elif "profile_id" in data:

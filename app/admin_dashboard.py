@@ -18,6 +18,7 @@ from app.admin_helpers import (
 )
 from app.models import Click, Link
 from app.platforms import PLATFORMS, platform_color, platform_label
+from app.services.account_avatar import backfill_link_avatars
 from app.services.stats import (
     aggregate_clicks_for_links,
     click_counts_for_links_period,
@@ -148,6 +149,7 @@ async def load_dashboard_page_data(
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
     stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account_term)
     links = list((await db.execute(stmt)).scalars().all())
+    await backfill_link_avatars(db, links, limit=24)
     link_ids = [link.id for link in links]
 
     earliest_row = await db.execute(select(func.min(Link.created_at)))
@@ -215,6 +217,7 @@ async def load_dashboard_page_data(
             {
                 "link": link,
                 "account_display": account_label_display(link.label),
+                "account_avatar_url": link.account_avatar_url,
                 "total": total_all,
                 "today": today,
                 "period_clicks": period_clicks,
