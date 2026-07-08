@@ -79,7 +79,9 @@ def link_filter_predicates(
         pid = parse_profile_id(profile)
         if pid is not None:
             preds.append(Link.profile_id == pid)
-    if platform and platform != "all":
+    if platform == "none":
+        preds.append(Link.platform.is_(None))
+    elif platform and platform != "all":
         preds.append(Link.platform == platform)
     return preds
 

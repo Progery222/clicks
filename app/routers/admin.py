@@ -211,6 +211,14 @@ async def dashboard(
             }
         )
     platform_filters = [{"id": "all", "label": "Все", "color": None, "count": plat_counts.get("all", 0)}]
+    platform_filters.append(
+        {
+            "id": "none",
+            "label": "Без платформы",
+            "color": None,
+            "count": plat_counts.get("none", 0),
+        }
+    )
     for p in PLATFORMS:
         platform_filters.append(
             {
