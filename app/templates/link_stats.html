@@ -5,9 +5,13 @@
   <div class="row between wrap stats-head">
     <div class="stats-head__main">
       <div class="stats-head__identity">
-        {% with avatar_url=('/admin/avatar/' ~ link.id), display=link.label or link.slug, size='lg' %}
-        {% include "_account_avatar.html" %}
-        {% endwith %}
+        <button type="button" class="account-avatar-btn js-open-avatar-modal" id="stats-avatar-btn"
+          data-link-id="{{ link.id }}" data-avatar-mode="{{ avatar_mode }}"
+          title="Настроить аватар" aria-label="Настроить аватар">
+          {% with avatar_url=avatar_src, display=link.label or link.slug, size='lg' %}
+          {% include "_account_avatar.html" %}
+          {% endwith %}
+        </button>
         <div class="stats-head__text">
           <h1 class="page-title">{{ link.label or link.slug }}</h1>
           <p class="muted stats-meta">Короткая ссылка: <a class="link-inline" href="{{ short_url }}">{{ short_url }}</a></p>
@@ -141,6 +145,7 @@
   </div>
 
 </section>
+{% include "_avatar_edit_modal.html" %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   var section = document.querySelector("section.card[data-stats-link-id]");
@@ -277,6 +282,138 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   window.setInterval(pollStats, POLL_MS);
+
+  var avatarBtn = document.getElementById("stats-avatar-btn");
+  var avatarModal = document.getElementById("avatar-edit-modal");
+  if (avatarBtn && avatarModal) {
+    var preview = document.getElementById("avatar-modal-preview");
+    var modeLabel = document.getElementById("avatar-modal-mode-label");
+    var statusEl = document.getElementById("avatar-modal-status");
+    var modeNames = {
+      auto: "Авто: фото профиля или логотип платформы",
+      photo: "Фото профиля",
+      platform: "Логотип платформы",
+      letter: "Первая буква / цифра"
+    };
+
+    function setStatus(msg, isError) {
+      if (!statusEl) return;
+      statusEl.hidden = !msg;
+      statusEl.textContent = msg || "";
+      statusEl.classList.toggle("new-link-modal__error", !!isError);
+    }
+
+    function renderPreviewInner(avatarUrl, label, mode) {
+      var letter = (label || "?").trim().charAt(0).toUpperCase() || "?";
+      if (mode === "letter" || !avatarUrl) {
+        preview.innerHTML =
+          '<span class="account-avatar account-avatar--lg account-avatar--letter">' +
+          '<span class="account-avatar__letter">' + letter + "</span></span>";
+        return;
+      }
+      preview.innerHTML =
+        '<span class="account-avatar account-avatar--lg">' +
+        '<img class="account-avatar__img" src="' + avatarUrl + "?t=" + Date.now() +
+        '" alt="" referrerpolicy="no-referrer" onerror="this.hidden=true;this.parentElement.classList.add(\'account-avatar--letter\')">' +
+        '<span class="account-avatar__letter">' + letter + "</span></span>";
+    }
+
+    function updateHeadAvatar(avatarUrl, label, mode) {
+      var inner = avatarBtn.querySelector(".account-avatar");
+      if (!inner) return;
+      var letter = (label || "?").trim().charAt(0).toUpperCase() || "?";
+      inner.classList.toggle("account-avatar--letter", mode === "letter" || !avatarUrl);
+      var img = inner.querySelector(".account-avatar__img");
+      if (mode === "letter" || !avatarUrl) {
+        if (img) img.remove();
+      } else {
+        if (!img) {
+          img = document.createElement("img");
+          img.className = "account-avatar__img";
+          img.alt = "";
+          img.loading = "lazy";
+          img.decoding = "async";
+          img.referrerPolicy = "no-referrer";
+          img.onerror = function () {
+            this.hidden = true;
+            inner.classList.add("account-avatar--letter");
+          };
+          inner.insertBefore(img, inner.firstChild);
+        }
+        img.hidden = false;
+        img.src = avatarUrl + "?t=" + Date.now();
+        inner.classList.remove("account-avatar--letter");
+      }
+      var letterEl = inner.querySelector(".account-avatar__letter");
+      if (letterEl) letterEl.textContent = letter;
+    }
+
+    function openAvatarModal() {
+      avatarModal.classList.add("is-open");
+      avatarModal.setAttribute("aria-hidden", "false");
+      setStatus("");
+      fetch("/admin/links/" + encodeURIComponent(linkId) + "/avatar/state", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var mode = data.mode || "auto";
+          if (modeLabel) modeLabel.textContent = modeNames[mode] || mode;
+          renderPreviewInner(data.avatar_url, data.label, mode);
+        })
+        .catch(function () { setStatus("Не удалось загрузить настройки", true); });
+    }
+
+    function closeAvatarModal() {
+      avatarModal.classList.remove("is-open");
+      avatarModal.setAttribute("aria-hidden", "true");
+    }
+
+    function postAvatarAction(url, body) {
+      setStatus("Подождите…");
+      var opts = { method: "POST", credentials: "same-origin" };
+      if (body) {
+        opts.headers = { "Content-Type": "application/x-www-form-urlencoded" };
+        opts.body = body;
+      }
+      return fetch(url, opts)
+        .then(function (r) {
+          return r.json().then(function (data) {
+            if (!r.ok) throw new Error(data.detail || "Ошибка");
+            return data;
+          });
+        })
+        .then(function (data) {
+          var mode = data.mode || "auto";
+          if (modeLabel) modeLabel.textContent = modeNames[mode] || mode;
+          renderPreviewInner(data.avatar_url, avatarBtn.querySelector(".account-avatar__letter")?.textContent, mode);
+          updateHeadAvatar(data.avatar_url, null, mode);
+          if (data.avatar_url && mode !== "letter") {
+            fetch("/admin/links/" + encodeURIComponent(linkId) + "/avatar/state", { credentials: "same-origin" })
+              .then(function (r) { return r.json(); })
+              .then(function (st) { updateHeadAvatar(st.avatar_url, st.label, st.mode); });
+          }
+          setStatus(data.ok === false ? "Фото не найдено" : "Готово", data.ok === false);
+          return data;
+        })
+        .catch(function (e) { setStatus(e.message || "Ошибка", true); });
+    }
+
+    avatarBtn.addEventListener("click", openAvatarModal);
+    avatarModal.querySelectorAll("[data-avatar-modal-dismiss]").forEach(function (el) {
+      el.addEventListener("click", closeAvatarModal);
+    });
+    document.getElementById("avatar-modal-scrape")?.addEventListener("click", function () {
+      postAvatarAction("/admin/links/" + encodeURIComponent(linkId) + "/avatar/scrape");
+    });
+    document.getElementById("avatar-modal-platform")?.addEventListener("click", function () {
+      postAvatarAction("/admin/links/" + encodeURIComponent(linkId) + "/avatar/mode", "mode=platform");
+    });
+    document.getElementById("avatar-modal-letter")?.addEventListener("click", function () {
+      postAvatarAction("/admin/links/" + encodeURIComponent(linkId) + "/avatar/mode", "mode=letter");
+    });
+    document.getElementById("avatar-modal-auto")?.addEventListener("click", function () {
+      postAvatarAction("/admin/links/" + encodeURIComponent(linkId) + "/avatar/mode", "mode=auto");
+    });
+  }
 });
 </script>
 {% endblock %}

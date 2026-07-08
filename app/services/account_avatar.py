@@ -12,8 +12,15 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Link
+from app.platforms import platform_favicon_url
 
 log = logging.getLogger(__name__)
+
+AVATAR_MODE_AUTO = "auto"
+AVATAR_MODE_PHOTO = "photo"
+AVATAR_MODE_PLATFORM = "platform"
+AVATAR_MODE_LETTER = "letter"
+AVATAR_MODES = frozenset({AVATAR_MODE_AUTO, AVATAR_MODE_PHOTO, AVATAR_MODE_PLATFORM, AVATAR_MODE_LETTER})
 
 _FETCH_HEADERS = {
     "User-Agent": (
@@ -146,8 +153,99 @@ def _domain_from_label(label: str) -> str | None:
     return host.removeprefix("www.") or None
 
 
-async def _url_is_image(client: httpx.AsyncClient, url: str) -> bool:
-    try:
+def platform_logo_url_for_link(link: Link) -> str | None:
+    """Логотип платформы или favicon домена из аккаунта/цели."""
+    if link.platform:
+        plat_url = platform_favicon_url(link.platform)
+        if plat_url:
+            return plat_url
+    for raw in (link.label, link.destination_url):
+        if not raw:
+            continue
+        domain = _domain_from_label(str(raw))
+        if domain:
+            return _favicon_url(domain)
+    return None
+
+
+def link_shows_avatar_image(link: Link) -> bool:
+    return (link.account_avatar_mode or AVATAR_MODE_AUTO) != AVATAR_MODE_LETTER
+
+
+async def _fetch_photo_url(
+    label: str | None,
+    platform: str | None,
+    client: httpx.AsyncClient,
+) -> str | None:
+    from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pic
+
+    stats_pic = await lookup_profile_pic(label, platform)
+    if stats_pic and not is_placeholder_avatar(stats_pic):
+        return stats_pic
+    pic = await resolve_account_avatar_url(label, platform, client)
+    if pic and not is_placeholder_avatar(pic):
+        return pic
+    return None
+
+
+async def bootstrap_link_avatar(
+    db: AsyncSession,
+    link: Link,
+    *,
+    allow_http: bool = True,
+) -> None:
+    """При создании/изменении: фото аккаунта или логотип платформы (режим auto)."""
+    link.account_avatar_mode = link.account_avatar_mode or AVATAR_MODE_AUTO
+    if link.account_avatar_mode == AVATAR_MODE_LETTER:
+        link.account_avatar_url = None
+        return
+    if link.account_avatar_mode == AVATAR_MODE_PLATFORM:
+        link.account_avatar_url = platform_logo_url_for_link(link)
+        return
+
+    if not link.label or not str(link.label).strip():
+        link.account_avatar_url = platform_logo_url_for_link(link)
+        return
+
+    pic: str | None = None
+    if allow_http:
+        async with httpx.AsyncClient(headers=_FETCH_HEADERS, follow_redirects=True) as client:
+            pic = await _fetch_photo_url(link.label, link.platform, client)
+    else:
+        from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pic
+
+        pic = await lookup_profile_pic(link.label, link.platform)
+        if pic and is_placeholder_avatar(pic):
+            pic = None
+
+    link.account_avatar_url = pic or platform_logo_url_for_link(link)
+
+
+async def scrape_link_avatar(db: AsyncSession, link: Link) -> str | None:
+    """Принудительно спарсить фото профиля (как в accountstats)."""
+    if not link.label or not str(link.label).strip():
+        return None
+    async with httpx.AsyncClient(headers=_FETCH_HEADERS, follow_redirects=True) as client:
+        pic = await _fetch_photo_url(link.label, link.platform, client)
+    if pic:
+        link.account_avatar_url = pic
+        link.account_avatar_mode = AVATAR_MODE_PHOTO
+    return pic
+
+
+async def set_link_avatar_mode(db: AsyncSession, link: Link, mode: str) -> None:
+    if mode not in AVATAR_MODES:
+        raise ValueError(f"invalid avatar mode: {mode}")
+    link.account_avatar_mode = mode
+    if mode == AVATAR_MODE_LETTER:
+        link.account_avatar_url = None
+    elif mode == AVATAR_MODE_PLATFORM:
+        link.account_avatar_url = platform_logo_url_for_link(link)
+    elif mode == AVATAR_MODE_AUTO:
+        await bootstrap_link_avatar(db, link)
+
+
+async def _url_is_image(client: httpx.AsyncClient, url: str) -> bool:    try:
         r = await client.head(url, follow_redirects=True, timeout=8.0)
         if r.status_code != 200:
             return False
@@ -294,6 +392,7 @@ async def sync_avatars_from_accountstats(
         ln
         for ln in links
         if ln.label
+        and (ln.account_avatar_mode or AVATAR_MODE_AUTO) in (AVATAR_MODE_AUTO, AVATAR_MODE_PHOTO)
         and (not ln.account_avatar_url or is_placeholder_avatar(ln.account_avatar_url))
     ][:limit]
     if not todo:
@@ -327,6 +426,7 @@ async def backfill_link_avatars(
         ln
         for ln in links
         if ln.label
+        and (ln.account_avatar_mode or AVATAR_MODE_AUTO) in (AVATAR_MODE_AUTO, AVATAR_MODE_PHOTO)
         and (not ln.account_avatar_url or is_placeholder_avatar(ln.account_avatar_url))
     ][:limit]
     if not todo:
@@ -360,5 +460,4 @@ async def backfill_link_avatars(
 
 
 async def refresh_link_avatar(db: AsyncSession, link: Link, *, force: bool = True) -> None:
-    async with httpx.AsyncClient(headers=_FETCH_HEADERS, follow_redirects=True) as client:
-        await ensure_link_avatar(db, link, client, force=force)
+    await bootstrap_link_avatar(db, link, allow_http=force)

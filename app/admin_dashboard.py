@@ -210,7 +210,7 @@ async def load_dashboard_page_data(
             {
                 "link": link,
                 "account_display": account_label_display(link.label),
-                "account_avatar_url": admin_avatar_href(link.id),
+                "account_avatar_url": admin_avatar_href(link),
                 "total": total_all,
                 "today": today,
                 "period_clicks": period_clicks,

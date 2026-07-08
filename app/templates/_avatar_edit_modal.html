@@ -1,0 +1,21 @@
+<div id="avatar-edit-modal" class="new-link-modal" aria-hidden="true" role="dialog" aria-modal="true"
+  aria-labelledby="avatar-edit-modal-title">
+  <div class="new-link-modal__backdrop" data-avatar-modal-dismiss tabindex="-1"></div>
+  <div class="new-link-modal__panel new-link-modal__panel--narrow">
+    <div class="new-link-modal__head">
+      <h2 id="avatar-edit-modal-title" class="new-link-modal__title">Аватар аккаунта</h2>
+      <button type="button" class="new-link-modal__close" data-avatar-modal-dismiss aria-label="Закрыть">×</button>
+    </div>
+    <div class="avatar-modal__preview-wrap">
+      <div id="avatar-modal-preview" class="avatar-modal__preview" aria-live="polite"></div>
+      <p class="muted small avatar-modal__mode" id="avatar-modal-mode-label"></p>
+    </div>
+    <div class="avatar-modal__actions stack">
+      <button type="button" class="btn btn-primary" id="avatar-modal-scrape">Спарсить фото профиля</button>
+      <button type="button" class="btn btn-secondary" id="avatar-modal-platform">Логотип платформы</button>
+      <button type="button" class="btn btn-secondary" id="avatar-modal-letter">Буква / цифра</button>
+      <button type="button" class="btn btn-secondary" id="avatar-modal-auto">Авто (фото или логотип)</button>
+    </div>
+    <p class="muted small avatar-modal__hint" id="avatar-modal-status" hidden></p>
+  </div>
+</div>

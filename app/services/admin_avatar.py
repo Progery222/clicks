@@ -12,7 +12,17 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Link
-from app.services.account_avatar import _FETCH_HEADERS, resolve_account_avatar_url
+from app.services.account_avatar import (
+    AVATAR_MODE_AUTO,
+    AVATAR_MODE_LETTER,
+    AVATAR_MODE_PHOTO,
+    AVATAR_MODE_PLATFORM,
+    _FETCH_HEADERS,
+    _fetch_photo_url,
+    link_shows_avatar_image,
+    platform_logo_url_for_link,
+    resolve_account_avatar_url,
+)
 from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pic
 
 log = logging.getLogger(__name__)
@@ -27,8 +37,12 @@ _resolve_guard = asyncio.Lock()
 _http_resolve_sem = asyncio.Semaphore(6)
 
 
-def admin_avatar_href(link_id: uuid.UUID) -> str:
-    return f"/admin/avatar/{link_id}"
+def admin_avatar_href(link: Link | uuid.UUID) -> str | None:
+    if isinstance(link, Link):
+        if not link_shows_avatar_image(link):
+            return None
+        return f"/admin/avatar/{link.id}"
+    return f"/admin/avatar/{link}"
 
 
 async def _lock_for(link_id: uuid.UUID) -> asyncio.Lock:
@@ -39,32 +53,55 @@ async def _lock_for(link_id: uuid.UUID) -> asyncio.Lock:
 
 
 async def resolve_and_cache_link_avatar(db: AsyncSession, link: Link) -> str | None:
-    """Вернуть URL картинки; при необходимости подтянуть из accountstats или HTTP."""
+    """Вернуть URL картинки с учётом режима отображения."""
+    mode = link.account_avatar_mode or AVATAR_MODE_AUTO
+
+    if mode == AVATAR_MODE_LETTER:
+        return None
+
+    if mode == AVATAR_MODE_PLATFORM:
+        return platform_logo_url_for_link(link)
+
     if link.account_avatar_url and not is_placeholder_avatar(link.account_avatar_url):
-        return link.account_avatar_url
+        if mode == AVATAR_MODE_PHOTO or mode == AVATAR_MODE_AUTO:
+            return link.account_avatar_url
 
     pic = await lookup_profile_pic(link.label, link.platform)
-    if pic:
+    if pic and not is_placeholder_avatar(pic):
         link.account_avatar_url = pic
         await db.commit()
         return pic
 
-    lock = await _lock_for(link.id)
-    async with lock:
-        await db.refresh(link)
-        if link.account_avatar_url and not is_placeholder_avatar(link.account_avatar_url):
-            return link.account_avatar_url
+    if mode == AVATAR_MODE_PHOTO or mode == AVATAR_MODE_AUTO:
+        lock = await _lock_for(link.id)
+        async with lock:
+            await db.refresh(link)
+            if link.account_avatar_url and not is_placeholder_avatar(link.account_avatar_url):
+                return link.account_avatar_url
 
-        async with _http_resolve_sem:
-            async with httpx.AsyncClient(
-                headers=_FETCH_HEADERS, follow_redirects=True, timeout=15.0
-            ) as client:
-                pic = await resolve_account_avatar_url(link.label, link.platform, client)
+            async with _http_resolve_sem:
+                async with httpx.AsyncClient(
+                    headers=_FETCH_HEADERS, follow_redirects=True, timeout=15.0
+                ) as client:
+                    if mode == AVATAR_MODE_PHOTO:
+                        pic = await _fetch_photo_url(link.label, link.platform, client)
+                    else:
+                        pic = await resolve_account_avatar_url(
+                            link.label, link.platform, client
+                        )
 
-        if pic and pic != link.account_avatar_url:
-            link.account_avatar_url = pic
-            await db.commit()
-        return pic
+            if pic and pic != link.account_avatar_url:
+                link.account_avatar_url = pic
+                await db.commit()
+            elif mode == AVATAR_MODE_AUTO:
+                fallback = platform_logo_url_for_link(link)
+                if fallback:
+                    link.account_avatar_url = fallback
+                    await db.commit()
+                    return fallback
+            return pic
+
+    return platform_logo_url_for_link(link)
 
 
 async def stream_link_avatar(db: AsyncSession, link: Link) -> Response:

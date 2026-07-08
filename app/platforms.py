@@ -78,3 +78,26 @@ def platform_color(platform_id: str | None) -> str:
 
 def is_valid_platform(platform_id: str | None) -> bool:
     return platform_id is None or platform_id in PLATFORM_BY_ID
+
+
+_PLATFORM_FAVICON_DOMAINS: dict[str, str] = {
+    "tiktok": "tiktok.com",
+    "instagram": "instagram.com",
+    "youtube": "youtube.com",
+    "x": "x.com",
+    "threads": "threads.net",
+    "facebook": "facebook.com",
+    "telegram": "telegram.org",
+    "rumble": "rumble.com",
+    "reddit": "reddit.com",
+}
+
+
+def platform_favicon_url(platform_id: str | None) -> str | None:
+    """Логотип платформы (favicon) для превью аккаунта."""
+    if not platform_id:
+        return None
+    domain = _PLATFORM_FAVICON_DOMAINS.get(platform_id)
+    if not domain:
+        return None
+    return f"https://www.google.com/s2/favicons?domain={domain}&sz=128"

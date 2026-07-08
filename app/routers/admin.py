@@ -33,8 +33,13 @@ from app.database import get_db
 from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_color, platform_label
 from app.services.label_match import account_label_display
-from app.services.account_avatar import backfill_link_avatars, refresh_link_avatar
-from app.services.admin_avatar import stream_link_avatar
+from app.services.account_avatar import (
+    AVATAR_MODES,
+    bootstrap_link_avatar,
+    scrape_link_avatar,
+    set_link_avatar_mode,
+)
+from app.services.admin_avatar import admin_avatar_href, stream_link_avatar
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.security import verify_env_password
 from app.services.ip_lockout import (
@@ -191,6 +196,70 @@ async def link_avatar(
     if not link:
         raise HTTPException(status_code=404, detail="link not found")
     return await stream_link_avatar(db, link)
+
+
+@router.get("/links/{link_id}/avatar/state")
+async def link_avatar_state(
+    link_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    _require_admin(request)
+    link = await db.get(Link, link_id)
+    if link is None:
+        raise HTTPException(404)
+    return JSONResponse(
+        {
+            "mode": link.account_avatar_mode or "auto",
+            "avatar_url": admin_avatar_href(link),
+            "label": link.label or link.slug,
+        }
+    )
+
+
+@router.post("/links/{link_id}/avatar/scrape")
+async def link_avatar_scrape(
+    link_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    _require_admin(request)
+    link = await db.get(Link, link_id)
+    if link is None:
+        raise HTTPException(404)
+    pic = await scrape_link_avatar(db, link)
+    await db.commit()
+    return JSONResponse(
+        {
+            "ok": bool(pic),
+            "mode": link.account_avatar_mode,
+            "avatar_url": admin_avatar_href(link),
+        }
+    )
+
+
+@router.post("/links/{link_id}/avatar/mode")
+async def link_avatar_mode_post(
+    link_id: uuid.UUID,
+    request: Request,
+    mode: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    _require_admin(request)
+    if mode not in AVATAR_MODES:
+        raise HTTPException(status_code=400, detail="invalid mode")
+    link = await db.get(Link, link_id)
+    if link is None:
+        raise HTTPException(404)
+    await set_link_avatar_mode(db, link, mode)
+    await db.commit()
+    return JSONResponse(
+        {
+            "ok": True,
+            "mode": link.account_avatar_mode,
+            "avatar_url": admin_avatar_href(link),
+        }
+    )
 
 
 @router.get("", response_class=HTMLResponse)
@@ -494,7 +563,7 @@ async def link_new_post(
     apply_link_label(link, label)
     apply_link_profile(link, parse_profile_id(profile_id))
     db.add(link)
-    await refresh_link_avatar(db, link)
+    await bootstrap_link_avatar(db, link)
     await db.commit()
     dest = f"/admin/links/{link.id}/stats"
     if modal:
@@ -533,12 +602,16 @@ async def link_bulk_post(
         raise HTTPException(status_code=400, detail=msg)
 
     dest_url = destination_url.strip()
+    new_links: list[Link] = []
     for label in label_list:
         slug = await _unique_slug(db)
         link = Link(slug=slug, destination_url=dest_url)
         apply_link_label(link, label)
         apply_link_profile(link, pid)
         db.add(link)
+        new_links.append(link)
+    for link in new_links:
+        await bootstrap_link_avatar(db, link, allow_http=False)
     await db.commit()
 
     prof_q = str(pid) if pid else "all"
@@ -658,6 +731,7 @@ async def link_import_csv(
         raise HTTPException(status_code=400, detail=msg) from e
 
     created = 0
+    imported: list[Link] = []
     for row in rows:
         if not _valid_url(row.destination_url):
             msg = f"Неверный URL: {row.destination_url[:80]}"
@@ -669,7 +743,10 @@ async def link_import_csv(
         apply_link_label(link, row.label)
         apply_link_profile(link, pid)
         db.add(link)
+        imported.append(link)
         created += 1
+    for link in imported:
+        await bootstrap_link_avatar(db, link, allow_http=False)
     await db.commit()
 
     prof_q = str(pid) if pid else "all"
@@ -733,7 +810,7 @@ async def link_edit_post(
     link.destination_url = destination_url.strip()
     apply_link_label(link, label)
     apply_link_profile(link, parse_profile_id(profile_id))
-    await refresh_link_avatar(db, link)
+    await bootstrap_link_avatar(db, link)
     await db.commit()
     return RedirectResponse(f"/admin/links/{link.id}/stats", status_code=302)
 
@@ -875,8 +952,8 @@ async def link_stats(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
-    if link.label and not link.account_avatar_url:
-        await refresh_link_avatar(db, link)
+    if (link.account_avatar_mode or "auto") == "auto" and not link.account_avatar_url:
+        await bootstrap_link_avatar(db, link, allow_http=False)
         await db.commit()
     start, end = stats_range(
         link, date_from, date_to, preset, default_preset="all"
@@ -910,6 +987,8 @@ async def link_stats(
             "short_url": short_url,
             "geoip_db_present": geoip_db_present,
             "countries_missing_code": countries_missing_code,
+            "avatar_src": admin_avatar_href(link),
+            "avatar_mode": link.account_avatar_mode or "auto",
         },
     )
 

@@ -12,6 +12,7 @@ def apply_link_label(link: Link, label: str | None) -> None:
     link.label = (label or "").strip() or None
     link.platform = detect_platform_from_text(link.label)
     link.account_avatar_url = None
+    link.account_avatar_mode = "auto"
 
 
 def apply_link_profile(link: Link, profile_id: uuid.UUID | None) -> None:
