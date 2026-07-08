@@ -226,13 +226,46 @@ async def ensure_link_avatar(
     return True
 
 
+async def sync_avatars_from_accountstats(
+    db: AsyncSession,
+    links: list[Link],
+    *,
+    limit: int = 100,
+) -> int:
+    """Быстрое обновление аватаров только из accountstats (без HTTP)."""
+    from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pics_batch
+
+    todo = [
+        ln
+        for ln in links
+        if ln.label
+        and (not ln.account_avatar_url or is_placeholder_avatar(ln.account_avatar_url))
+    ][:limit]
+    if not todo:
+        return 0
+
+    batch_pics = await lookup_profile_pics_batch(
+        [(ln.label, ln.platform) for ln in todo]
+    )
+    updated = 0
+    for link in todo:
+        pic = batch_pics.get(str(link.label).strip())
+        if pic and pic != link.account_avatar_url:
+            link.account_avatar_url = pic
+            updated += 1
+    if updated:
+        await db.commit()
+    return updated
+
+
 async def backfill_link_avatars(
     db: AsyncSession,
     links: list[Link],
     *,
     limit: int = 20,
+    allow_http: bool = True,
 ) -> int:
-    """Подтянуть аватары для ссылок без нормального account_avatar_url."""
+    """Подтянуть аватары: accountstats + опционально HTTP (og:image)."""
     from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pics_batch
 
     todo = [
@@ -249,12 +282,20 @@ async def backfill_link_avatars(
     )
 
     updated = 0
+    for link in todo:
+        pic = batch_pics.get(str(link.label).strip())
+        if pic and pic != link.account_avatar_url:
+            link.account_avatar_url = pic
+            updated += 1
+
+    if not allow_http:
+        if updated:
+            await db.commit()
+        return updated
+
     async with httpx.AsyncClient(headers=_FETCH_HEADERS, follow_redirects=True) as client:
         for link in todo:
-            pic = batch_pics.get(str(link.label).strip())
-            if pic and pic != link.account_avatar_url:
-                link.account_avatar_url = pic
-                updated += 1
+            if link.account_avatar_url and not is_placeholder_avatar(link.account_avatar_url):
                 continue
             if await ensure_link_avatar(db, link, client, force=True):
                 updated += 1

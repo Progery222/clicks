@@ -58,6 +58,8 @@ from app.services.stats import (
     top_device_types_for_links,
     top_os,
     top_os_for_links,
+    top_referers,
+    top_user_agents,
 )
 from app.stats_range import (
     DASHBOARD_DEFAULT_PRESET,
@@ -219,8 +221,6 @@ async def dashboard(
             "period_total": 0,
             "period_uniques": 0,
             "platform_stats": [],
-            "top_referers": [],
-            "top_user_agents": [],
             "period_hrefs": {
                 "today": "/admin"
                 + build_filter_query(profile, platform, account=account, preset="today"),
@@ -322,6 +322,39 @@ async def api_link_counts(
         pc, pu = period_map.get(lid, (0, 0))
         payload[str(lid)] = {"total": t, "today": d, "period": pc, "period_uniques": pu}
     return JSONResponse({"counts": payload})
+
+
+@router.get("/api/traffic-insights")
+async def api_traffic_insights(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    profile: str = Query("all"),
+    platform: str = Query("all"),
+    account: str | None = Query(None),
+    date_from: str | None = Query(None, alias="from"),
+    date_to: str | None = Query(None, alias="to"),
+    preset: str | None = Query(None),
+) -> JSONResponse:
+    """Топ referer и user-agent за период (для модалки на /admin)."""
+    _require_admin(request)
+    stmt = select(Link.id)
+    stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account)
+    link_ids = list((await db.execute(stmt)).scalars().all())
+    earliest_row = await db.execute(select(func.min(Link.created_at)))
+    earliest = earliest_row.scalar_one_or_none()
+    start, end = dashboard_stats_range(date_from, date_to, preset, earliest=earliest)
+    try:
+        referers = await top_referers(db, link_ids, start, end)
+        user_agents = await top_user_agents(db, link_ids, start, end)
+    except Exception:
+        log.exception("api_traffic_insights failed")
+        referers, user_agents = [], []
+    return JSONResponse(
+        {
+            "referers": [{"label": label, "count": cnt} for label, cnt in referers],
+            "user_agents": [{"label": label, "count": cnt} for label, cnt in user_agents],
+        }
+    )
 
 
 def _valid_url(url: str) -> bool:

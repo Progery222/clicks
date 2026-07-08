@@ -283,23 +283,15 @@
     <div class="dash-split dash-split--modal">
       <div>
         <h3 class="section-title section-title--sm">Referer</h3>
-        {% if top_referers %}
-        <ul class="dash-rank">
-          {% for label, cnt in top_referers %}
-          <li><span class="dash-rank__label">{{ label }}</span><span class="dash-rank__cnt">{{ cnt }}</span></li>
-          {% endfor %}
+        <ul id="traffic-referers" class="dash-rank">
+          <li class="muted small">Откройте список — данные подгрузятся.</li>
         </ul>
-        {% else %}<p class="muted small">Нет данных за период</p>{% endif %}
       </div>
       <div>
         <h3 class="section-title section-title--sm">User-Agent</h3>
-        {% if top_user_agents %}
-        <ul class="dash-rank">
-          {% for label, cnt in top_user_agents %}
-          <li><span class="dash-rank__label" title="{{ label }}">{{ label }}</span><span class="dash-rank__cnt">{{ cnt }}</span></li>
-          {% endfor %}
+        <ul id="traffic-user-agents" class="dash-rank">
+          <li class="muted small">Откройте список — данные подгрузятся.</li>
         </ul>
-        {% else %}<p class="muted small">Нет данных за период</p>{% endif %}
       </div>
     </div>
   </div>
@@ -697,11 +689,61 @@
   (function () {
     var trafficModal = document.getElementById("traffic-modal");
     if (!trafficModal) return;
+    var referersEl = document.getElementById("traffic-referers");
+    var uaEl = document.getElementById("traffic-user-agents");
+    var trafficLoaded = false;
+    var trafficLoading = false;
+
+    function esc(s) {
+      var d = document.createElement("div");
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+
+    function renderRankList(el, rows, emptyMsg) {
+      if (!el) return;
+      if (!rows || !rows.length) {
+        el.innerHTML = "<li class=\"muted small\">" + esc(emptyMsg) + "</li>";
+        return;
+      }
+      var html = "";
+      rows.forEach(function (row) {
+        html += "<li><span class=\"dash-rank__label\" title=\"" + esc(row.label) + "\">" + esc(row.label) + "</span><span class=\"dash-rank__cnt\">" + esc(String(row.count)) + "</span></li>";
+      });
+      el.innerHTML = html;
+    }
+
+    function loadTrafficInsights() {
+      if (trafficLoaded || trafficLoading) return;
+      trafficLoading = true;
+      if (referersEl) referersEl.innerHTML = "<li class=\"muted small\">Загрузка…</li>";
+      if (uaEl) uaEl.innerHTML = "<li class=\"muted small\">Загрузка…</li>";
+      var qs = window.location.search || "";
+      fetch("/admin/api/traffic-insights" + qs, { credentials: "same-origin" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("bad status");
+          return r.json();
+        })
+        .then(function (data) {
+          renderRankList(referersEl, data.referers || [], "Нет данных за период");
+          renderRankList(uaEl, data.user_agents || [], "Нет данных за период");
+          trafficLoaded = true;
+        })
+        .catch(function () {
+          if (referersEl) referersEl.innerHTML = "<li class=\"muted small\">Не удалось загрузить</li>";
+          if (uaEl) uaEl.innerHTML = "<li class=\"muted small\">Не удалось загрузить</li>";
+        })
+        .finally(function () {
+          trafficLoading = false;
+        });
+    }
+
     function setTrafficOpen(open) {
       trafficModal.classList.toggle("is-open", open);
       trafficModal.setAttribute("aria-hidden", open ? "false" : "true");
       var anyOpen = document.querySelector(".new-link-modal.is-open");
       document.body.style.overflow = anyOpen ? "hidden" : "";
+      if (open) loadTrafficInsights();
     }
     document.querySelectorAll(".js-open-traffic-modal").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -982,6 +1024,7 @@
       .catch(function () {});
   }
   window.setInterval(pollDashboardCounts, POLL_MS);
+  pollDashboardCounts();
 })();
 </script>
 {% endblock %}

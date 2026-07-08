@@ -18,14 +18,12 @@ from app.admin_helpers import (
 )
 from app.models import Click, Link
 from app.platforms import PLATFORMS, platform_color, platform_label
-from app.services.account_avatar import backfill_link_avatars
+from app.services.account_avatar import sync_avatars_from_accountstats
 from app.services.stats import (
     aggregate_clicks_for_links,
     click_counts_for_links_period,
     dashboard_click_counts,
     platform_click_stats,
-    top_referers,
-    top_user_agents,
 )
 from app.stats_range import (
     DASHBOARD_DEFAULT_PRESET,
@@ -149,7 +147,7 @@ async def load_dashboard_page_data(
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
     stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account_term)
     links = list((await db.execute(stmt)).scalars().all())
-    await backfill_link_avatars(db, links, limit=48)
+    await sync_avatars_from_accountstats(db, links, limit=100)
     link_ids = [link.id for link in links]
 
     earliest_row = await db.execute(select(func.min(Link.created_at)))
@@ -195,12 +193,6 @@ async def load_dashboard_page_data(
                 "uniques": row["uniques"],
             }
         )
-
-    try:
-        referers = await top_referers(db, link_ids, start, end)
-        user_agents = await top_user_agents(db, link_ids, start, end)
-    except Exception:
-        referers, user_agents = [], []
 
     period_label = {
         "today": "Сегодня (UTC)",
@@ -284,8 +276,6 @@ async def load_dashboard_page_data(
         "period_total": period_total,
         "period_uniques": period_uniques,
         "platform_stats": platform_stats,
-        "top_referers": referers,
-        "top_user_agents": user_agents,
         "admin_filter_href": lambda prof, plat: admin_filter_href_for(
             prof,
             plat,
