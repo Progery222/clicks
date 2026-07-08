@@ -46,6 +46,7 @@ def admin_filter_href_for(
     profile: str,
     platform: str,
     *,
+    account: str | None = None,
     active_preset: str,
     period_from: str,
     period_to: str,
@@ -55,6 +56,7 @@ def admin_filter_href_for(
     return "/admin" + build_filter_query(
         profile,
         platform,
+        account=account,
         sort=sort,
         order=order,
         **_period_query_kwargs(active_preset, period_from, period_to),
@@ -65,6 +67,7 @@ def export_qs_for(
     profile: str,
     platform: str,
     *,
+    account: str | None = None,
     active_preset: str,
     period_from: str,
     period_to: str,
@@ -74,6 +77,7 @@ def export_qs_for(
     return build_filter_query(
         profile,
         platform,
+        account=account,
         sort=sort,
         order=order,
         **_period_query_kwargs(active_preset, period_from, period_to),
@@ -84,6 +88,7 @@ def sort_column_href_for(
     profile: str,
     platform: str,
     *,
+    account: str | None = None,
     active_preset: str,
     period_from: str,
     period_to: str,
@@ -98,6 +103,7 @@ def sort_column_href_for(
     return "/admin" + build_filter_query(
         profile,
         platform,
+        account=account,
         sort=column,
         order=next_order,
         **_period_query_kwargs(active_preset, period_from, period_to),
@@ -129,6 +135,7 @@ async def load_dashboard_page_data(
     *,
     profile: str,
     platform: str,
+    account: str | None = None,
     date_from: str | None,
     date_to: str | None,
     preset: str | None,
@@ -137,8 +144,9 @@ async def load_dashboard_page_data(
 ) -> dict:
     sort_by = normalize_table_sort(sort)
     sort_order = normalize_table_order(order, sort=sort_by)
+    account_term = (account or "").strip()
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
-    stmt = apply_link_filters(stmt, profile=profile, platform=platform)
+    stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account_term)
     links = list((await db.execute(stmt)).scalars().all())
     link_ids = [link.id for link in links]
 
@@ -221,6 +229,7 @@ async def load_dashboard_page_data(
     filter_qs = export_qs_for(
         profile,
         platform,
+        account=account_term or None,
         active_preset=active,
         period_from=period_from,
         period_to=period_to,
@@ -230,12 +239,30 @@ async def load_dashboard_page_data(
     period_hrefs = {
         "today": "/admin"
         + build_filter_query(
-            profile, platform, preset="today", sort=sort_by, order=sort_order
+            profile,
+            platform,
+            account=account_term or None,
+            preset="today",
+            sort=sort_by,
+            order=sort_order,
         ),
         "week": "/admin"
-        + build_filter_query(profile, platform, preset="week", sort=sort_by, order=sort_order),
+        + build_filter_query(
+            profile,
+            platform,
+            account=account_term or None,
+            preset="week",
+            sort=sort_by,
+            order=sort_order,
+        ),
         "all": "/admin"
-        + build_filter_query(profile, platform, sort=sort_by, order=sort_order),
+        + build_filter_query(
+            profile,
+            platform,
+            account=account_term or None,
+            sort=sort_by,
+            order=sort_order,
+        ),
     }
 
     return {
@@ -244,6 +271,7 @@ async def load_dashboard_page_data(
         "sort_order": sort_order,
         "filter_profile": profile,
         "filter_platform": platform,
+        "filter_account": account_term,
         "filter_qs": filter_qs,
         "period_hrefs": period_hrefs,
         "active_preset": active,
@@ -258,6 +286,7 @@ async def load_dashboard_page_data(
         "admin_filter_href": lambda prof, plat: admin_filter_href_for(
             prof,
             plat,
+            account=account_term or None,
             active_preset=active,
             period_from=period_from,
             period_to=period_to,
@@ -267,6 +296,7 @@ async def load_dashboard_page_data(
         "sort_href": lambda col: sort_column_href_for(
             profile,
             platform,
+            account=account_term or None,
             active_preset=active,
             period_from=period_from,
             period_to=period_to,

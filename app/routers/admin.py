@@ -148,6 +148,7 @@ async def dashboard(
     new: str | None = Query(None),
     profile: str = Query("all"),
     platform: str = Query("all"),
+    account: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -160,6 +161,7 @@ async def dashboard(
             db,
             profile=profile,
             platform=platform,
+            account=account,
             date_from=date_from,
             date_to=date_to,
             preset=preset,
@@ -172,7 +174,8 @@ async def dashboard(
             "link_rows": [],
             "filter_profile": profile,
             "filter_platform": platform,
-            "filter_qs": build_filter_query(profile, platform),
+            "filter_account": (account or "").strip(),
+            "filter_qs": build_filter_query(profile, platform, account=account),
             "active_preset": "all",
             "period_from": "",
             "period_to": "",
@@ -183,11 +186,14 @@ async def dashboard(
             "top_referers": [],
             "top_user_agents": [],
             "period_hrefs": {
-                "today": "/admin" + build_filter_query(profile, platform, preset="today"),
-                "week": "/admin" + build_filter_query(profile, platform, preset="week"),
-                "all": "/admin" + build_filter_query(profile, platform),
+                "today": "/admin"
+                + build_filter_query(profile, platform, account=account, preset="today"),
+                "week": "/admin"
+                + build_filter_query(profile, platform, account=account, preset="week"),
+                "all": "/admin" + build_filter_query(profile, platform, account=account),
             },
-            "admin_filter_href": lambda prof, plat: "/admin" + build_filter_query(prof, plat),
+            "admin_filter_href": lambda prof, plat: "/admin"
+            + build_filter_query(prof, plat, account=account),
         }
     profiles = await load_profiles(db)
     prof_counts = await profile_link_counts(db)
@@ -252,6 +258,7 @@ async def api_link_counts(
     db: AsyncSession = Depends(get_db),
     profile: str = Query("all"),
     platform: str = Query("all"),
+    account: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -259,7 +266,7 @@ async def api_link_counts(
     """Счётчики по ссылкам для polling: всего, сегодня UTC, за выбранный период."""
     _require_admin(request)
     stmt = select(Link.id)
-    stmt = apply_link_filters(stmt, profile=profile, platform=platform)
+    stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account)
     link_ids = list((await db.execute(stmt)).scalars().all())
     earliest_row = await db.execute(select(func.min(Link.created_at)))
     earliest = earliest_row.scalar_one_or_none()
@@ -667,15 +674,18 @@ async def links_delete_all(
     db: AsyncSession = Depends(get_db),
     profile: str = Query("all"),
     platform: str = Query("all"),
+    account: str | None = Query(None),
 ) -> RedirectResponse:
     """Удалить все ссылки, попадающие под текущие фильтры профиля и платформы."""
     _require_admin(request)
     stmt = delete(Link)
-    for pred in link_filter_predicates(profile, platform):
+    for pred in link_filter_predicates(profile, platform, account):
         stmt = stmt.where(pred)
     await db.execute(stmt)
     await db.commit()
-    return RedirectResponse("/admin" + build_filter_query(profile, platform), status_code=302)
+    return RedirectResponse(
+        "/admin" + build_filter_query(profile, platform, account=account), status_code=302
+    )
 
 
 @router.post("/links/clicks/clear-all")
@@ -684,6 +694,7 @@ async def clear_all_link_clicks(
     db: AsyncSession = Depends(get_db),
     profile: str = Query("all"),
     platform: str = Query("all"),
+    account: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -693,7 +704,7 @@ async def clear_all_link_clicks(
     """Удалить записи кликов по ссылкам из текущих фильтров (сами ссылки остаются)."""
     _require_admin(request)
     stmt = delete(Click)
-    stmt = apply_click_link_filters(stmt, profile=profile, platform=platform)
+    stmt = apply_click_link_filters(stmt, profile=profile, platform=platform, account=account)
     await db.execute(stmt)
     await db.commit()
     return RedirectResponse(
@@ -701,6 +712,7 @@ async def clear_all_link_clicks(
         + build_filter_query(
             profile,
             platform,
+            account=account,
             preset=preset,
             date_from=date_from,
             date_to=date_to,
@@ -812,6 +824,7 @@ async def export_links_csv(
     db: AsyncSession = Depends(get_db),
     profile: str = Query("all"),
     platform: str = Query("all"),
+    account: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -821,7 +834,7 @@ async def export_links_csv(
     earliest = await earliest_link_created_at(db)
     start, end = resolve_stats_period(date_from, date_to, preset, earliest=earliest)
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
-    stmt = apply_link_filters(stmt, profile=profile, platform=platform)
+    stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account)
     links = list((await db.execute(stmt)).scalars().all())
     link_ids = [link.id for link in links]
     try:
@@ -885,6 +898,7 @@ async def export_clicks_csv(
     link_id: uuid.UUID | None = Query(None),
     profile: str = Query("all"),
     platform: str = Query("all"),
+    account: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -896,7 +910,7 @@ async def export_clicks_csv(
     if link_id is not None:
         stmt = stmt.where(Click.link_id == link_id)
     else:
-        stmt = apply_click_link_filters(stmt, profile=profile, platform=platform)
+        stmt = apply_click_link_filters(stmt, profile=profile, platform=platform, account=account)
     stmt = stmt.order_by(Click.created_at)
     res = await db.execute(stmt)
     rows = res.scalars().all()
@@ -945,6 +959,7 @@ async def export_summary_csv(
     link_id: uuid.UUID | None = Query(None),
     profile: str = Query("all"),
     platform: str = Query("all"),
+    account: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -967,7 +982,9 @@ async def export_summary_csv(
     if link_id is not None:
         stmt = stmt.where(Click.link_id == link_id)
     else:
-        link_ids = apply_link_filters(select(Link.id), profile=profile, platform=platform)
+        link_ids = apply_link_filters(
+            select(Link.id), profile=profile, platform=platform, account=account
+        )
         stmt = stmt.where(Click.link_id.in_(link_ids))
     res = await db.execute(stmt)
     raw = res.all()

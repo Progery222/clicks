@@ -34,10 +34,23 @@ def normalize_table_order(order: str | None, *, sort: str | None) -> str | None:
     return o if o in ("asc", "desc") else "desc"
 
 
+def normalize_account_search(raw: str | None) -> str | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    return s[:255]
+
+
+def account_label_ilike(term: str):
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return Link.label.ilike(f"%{escaped}%", escape="\\")
+
+
 def build_filter_query(
     profile: str,
     platform: str,
     *,
+    account: str | None = None,
     preset: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
@@ -49,6 +62,9 @@ def build_filter_query(
         params["profile"] = profile
     if platform and platform != "all":
         params["platform"] = platform
+    account_term = normalize_account_search(account)
+    if account_term:
+        params["account"] = account_term
     p = (preset or "").strip().lower()
     if p and p not in ("", "all"):
         params["preset"] = p
@@ -70,8 +86,9 @@ def build_filter_query(
 def link_filter_predicates(
     profile: str | None,
     platform: str | None,
+    account: str | None = None,
 ) -> list:
-    """Условия WHERE для фильтра профиля/платформы (select и delete)."""
+    """Условия WHERE для фильтра профиля/платформы/аккаунта (select и delete)."""
     preds: list = []
     if profile == "none":
         preds.append(Link.profile_id.is_(None))
@@ -83,6 +100,9 @@ def link_filter_predicates(
         preds.append(Link.platform.is_(None))
     elif platform and platform != "all":
         preds.append(Link.platform == platform)
+    account_term = normalize_account_search(account)
+    if account_term:
+        preds.append(account_label_ilike(account_term))
     return preds
 
 
@@ -91,8 +111,9 @@ def apply_link_filters(
     *,
     profile: str | None,
     platform: str | None,
+    account: str | None = None,
 ) -> Select[tuple[Link]]:
-    for pred in link_filter_predicates(profile, platform):
+    for pred in link_filter_predicates(profile, platform, account):
         stmt = stmt.where(pred)
     return stmt
 
@@ -135,8 +156,10 @@ def resolve_stats_period(
     return parse_range(date_from, date_to)
 
 
-def apply_click_link_filters(stmt, profile: str, platform: str):
-    link_ids = apply_link_filters(select(Link.id), profile=profile, platform=platform)
+def apply_click_link_filters(stmt, profile: str, platform: str, account: str | None = None):
+    link_ids = apply_link_filters(
+        select(Link.id), profile=profile, platform=platform, account=account
+    )
     return stmt.where(Click.link_id.in_(link_ids))
 
 

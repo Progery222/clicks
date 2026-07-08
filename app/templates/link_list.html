@@ -130,6 +130,34 @@
         <span class="muted small">за период: {{ period_label | default('') }}</span>
       </div>
 
+      <form class="account-search-row" method="get" action="/admin" role="search">
+        {% if (filter_profile | default('all')) != 'all' %}
+        <input type="hidden" name="profile" value="{{ filter_profile }}">
+        {% endif %}
+        {% if (filter_platform | default('all')) != 'all' %}
+        <input type="hidden" name="platform" value="{{ filter_platform }}">
+        {% endif %}
+        {% if active_preset == 'custom' %}
+        <input type="hidden" name="from" value="{{ period_from }}">
+        <input type="hidden" name="to" value="{{ period_to }}">
+        {% elif active_preset == 'today' %}
+        <input type="hidden" name="preset" value="today">
+        {% elif active_preset == 'week' %}
+        <input type="hidden" name="preset" value="week">
+        {% endif %}
+        {% if sort_by %}
+        <input type="hidden" name="sort" value="{{ sort_by }}">
+        {% endif %}
+        {% if sort_order %}
+        <input type="hidden" name="order" value="{{ sort_order }}">
+        {% endif %}
+        <div class="account-search-wrap">
+          <input type="search" id="account-search" class="account-search input" name="account"
+            value="{{ filter_account | default('') | e }}"
+            placeholder="Поиск по аккаунту" autocomplete="off" spellcheck="false">
+        </div>
+      </form>
+
       {% if link_rows is defined and link_rows %}
       <div class="table-wrap table-wrap--flush">
         <table class="table table--wide">
@@ -218,12 +246,17 @@
       </div>
       {% else %}
       <div class="empty-state">
+        {% if filter_account | default('') %}
+        <p class="empty-state__title">Ничего не найдено</p>
+        <p class="muted">По запросу «{{ filter_account | e }}» ссылок нет.</p>
+        {% else %}
         <p class="empty-state__title">Пока нет ссылок</p>
         <p class="muted">Создайте первую короткую ссылку для TikTok, Instagram и т.д.</p>
         <div class="admin-actions admin-actions--center">
           <button type="button" class="btn btn-primary js-open-new-link-modal">Создать ссылку</button>
           <button type="button" class="btn js-open-bulk-link-modal">Массовое создание</button>
         </div>
+        {% endif %}
       </div>
       {% endif %}
     </div>
@@ -405,6 +438,29 @@
         var show = !q || label.indexOf(q) !== -1;
         el.style.display = show ? "" : "none";
       });
+    });
+  }
+
+  var accountSearch = document.getElementById("account-search");
+  var accountSearchForm = accountSearch && accountSearch.closest("form");
+  if (accountSearch && accountSearchForm) {
+    var accountSearchTimer = null;
+    function submitAccountSearch() {
+      if (accountSearchTimer) {
+        clearTimeout(accountSearchTimer);
+        accountSearchTimer = null;
+      }
+      accountSearchForm.requestSubmit();
+    }
+    accountSearch.addEventListener("input", function () {
+      if (accountSearchTimer) clearTimeout(accountSearchTimer);
+      accountSearchTimer = setTimeout(submitAccountSearch, 400);
+    });
+    accountSearch.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        accountSearch.value = "";
+        submitAccountSearch();
+      }
     });
   }
 
