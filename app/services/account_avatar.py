@@ -245,7 +245,8 @@ async def set_link_avatar_mode(db: AsyncSession, link: Link, mode: str) -> None:
         await bootstrap_link_avatar(db, link)
 
 
-async def _url_is_image(client: httpx.AsyncClient, url: str) -> bool:    try:
+async def _url_is_image(client: httpx.AsyncClient, url: str) -> bool:
+    try:
         r = await client.head(url, follow_redirects=True, timeout=8.0)
         if r.status_code != 200:
             return False
