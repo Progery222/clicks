@@ -92,24 +92,37 @@ def normalize_account_label(text: str | None) -> str | None:
 
 
 def account_label_display(text: str | None) -> str | None:
-    """Короткое имя аккаунта для таблицы (username, @handle или id без полного URL)."""
+    """Короткая подпись аккаунта для админки (username без URL/префикса платформы)."""
     if text is None:
         return None
     s = str(text).strip()
     if not s:
         return None
-    if not re.match(r"^https?://", s, re.I):
-        return s.lstrip("@").strip() or None
-
-    key = normalize_account_label(s)
-    if not key:
+    norm = normalize_account_label(s)
+    if not norm:
         return None
-    if ":" not in key:
-        return key
-
-    prefix, rest = key.split(":", 1)
-    if prefix == "facebook" and rest.startswith("id:"):
-        return rest[3:]
-    if prefix == "youtube" and rest.startswith("channel:"):
-        return rest[8:]
-    return rest.lstrip("@")
+    if norm.startswith("instagram:"):
+        return norm.split(":", 1)[1]
+    if norm.startswith("tiktok:@"):
+        return norm.split("@", 1)[1]
+    if norm.startswith("facebook:id:"):
+        return norm.rsplit(":", 1)[1]
+    if norm.startswith("youtube:channel:"):
+        return norm.rsplit(":", 1)[1]
+    if norm.startswith("youtube:"):
+        return norm.split(":", 1)[1]
+    if norm.startswith("telegram:"):
+        return norm.split(":", 1)[1]
+    if norm.startswith("x:"):
+        return norm.split(":", 1)[1]
+    if norm.startswith("threads:@"):
+        return norm.split("@", 1)[1]
+    if norm.startswith("facebook:"):
+        return norm.split(":", 1)[1]
+    if norm.startswith("rumble:"):
+        return norm.split(":", 1)[1]
+    if norm.startswith("reddit:"):
+        return norm.split(":", 1)[1]
+    if ":" not in norm:
+        return norm
+    return norm.rsplit(":", 1)[-1] or norm

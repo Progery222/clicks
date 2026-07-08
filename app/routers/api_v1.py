@@ -419,7 +419,10 @@ async def resolve_clicks_by_profile_urls(
     db: DbDep,
     body: LinkResolveClicksIn,
 ) -> LinkResolveClicksOut:
-    """Сумма total_clicks по label (нормализация URL как в дашборде). До 500 URL за запрос."""
+    """
+  Сумма total_clicks по всем коротким ссылкам, у которых label совпадает с URL профиля
+  (нормализация как в AccountsStats). До 500 URL за запрос.
+    """
     raw_urls = [str(u).strip() for u in (body.profile_urls or []) if str(u).strip()]
     if len(raw_urls) > 500:
         raise HTTPException(

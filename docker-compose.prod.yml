@@ -1,0 +1,46 @@
+# Запасной деплой на Mobile Farm (порт 8010, docker compose).
+# Продакшен: https://bytl.org/ (Coolify на 10.20.87.230, см. docs/PRODUCTION.md)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: links-postgres
+    environment:
+      POSTGRES_USER: links
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: links
+    volumes:
+      - links_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U links -d links"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: links-app
+    ports:
+      - "0.0.0.0:8010:8010"
+    environment:
+      PORT: "8010"
+      DATABASE_URL: postgresql+asyncpg://links:${POSTGRES_PASSWORD}@postgres:5432/links
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      API_TOKEN: ${API_TOKEN:-}
+      SESSION_COOKIE_HTTPS_ONLY: ${SESSION_COOKIE_HTTPS_ONLY:-false}
+      GEOIP_COUNTRY_AUTO_DOWNLOAD: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8010/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+
+volumes:
+  links_pg_data:
