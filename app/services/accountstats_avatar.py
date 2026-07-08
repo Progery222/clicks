@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from app.config import get_settings
 from app.services.label_match import account_label_display
 
+log = logging.getLogger(__name__)
+
 _SQL_NORM_URL = (
     "lower(regexp_replace(regexp_replace(rtrim(url, '/'), '^https?://', '', 'i'), '^www\\.', '', 'i'))"
 )
@@ -84,42 +86,44 @@ async def lookup_profile_pic(label: str | None, platform: str | None) -> str | N
 
     norm_url = _normalize_profile_url(profile_url) if profile_url else None
 
+    _WHERE_USABLE = """
+        profile_pic IS NOT NULL
+        AND btrim(profile_pic) <> ''
+        AND profile_pic NOT ILIKE '%cdninstagram.com/rsrc.php%'
+    """
+
     try:
         async with engine.connect() as conn:
-            row = (
-                await conn.execute(
-                    text(
-                        """
-                        SELECT profile_pic
-                        FROM accounts
-                        WHERE profile_pic IS NOT NULL
-                          AND btrim(profile_pic) <> ''
-                          AND profile_pic NOT ILIKE '%cdninstagram.com/rsrc.php%'
-                          AND (
-                            (:norm_url IS NOT NULL AND """
-                        + _SQL_NORM_URL
-                        + """ = :norm_url)
-                            OR (
-                              :plat IS NOT NULL
-                              AND :username IS NOT NULL
+            row = None
+            if norm_url:
+                row = (
+                    await conn.execute(
+                        text(
+                            f"""
+                            SELECT profile_pic FROM accounts
+                            WHERE {_WHERE_USABLE}
+                              AND {_SQL_NORM_URL} = :norm_url
+                            LIMIT 1
+                            """
+                        ),
+                        {"norm_url": norm_url},
+                    )
+                ).first()
+            if not row and plat and username:
+                row = (
+                    await conn.execute(
+                        text(
+                            f"""
+                            SELECT profile_pic FROM accounts
+                            WHERE {_WHERE_USABLE}
                               AND upper(platform) = :plat
                               AND lower(username) = lower(:username)
-                            )
-                          )
-                        ORDER BY
-                          CASE WHEN :norm_url IS NOT NULL AND """
-                        + _SQL_NORM_URL
-                        + """ = :norm_url THEN 0 ELSE 1 END
-                        LIMIT 1
-                        """
-                    ),
-                    {
-                        "norm_url": norm_url,
-                        "plat": plat,
-                        "username": username,
-                    },
-                )
-            ).first()
+                            LIMIT 1
+                            """
+                        ),
+                        {"plat": plat, "username": username},
+                    )
+                ).first()
     except Exception as exc:
         log.warning("accountstats avatar lookup failed: %s", exc)
         return None
