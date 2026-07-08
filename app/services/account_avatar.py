@@ -176,6 +176,12 @@ async def resolve_account_avatar_url(
     if not label or not str(label).strip():
         return None
 
+    from app.services.accountstats_avatar import lookup_profile_pic
+
+    stats_pic = await lookup_profile_pic(label, platform)
+    if stats_pic:
+        return stats_pic
+
     tg_user = _telegram_username(label, platform)
     if tg_user:
         pic = await _try_telegram_userpic(client, tg_user)
@@ -189,7 +195,7 @@ async def resolve_account_avatar_url(
             return og
 
     domain = _domain_from_label(label)
-    if domain:
+    if domain and not platform:
         return _favicon_url(domain)
 
     return None
@@ -208,7 +214,9 @@ async def ensure_link_avatar(
             link.account_avatar_url = None
             return True
         return False
-    if not force and link.account_avatar_url:
+    from app.services.accountstats_avatar import is_placeholder_avatar
+
+    if not force and link.account_avatar_url and not is_placeholder_avatar(link.account_avatar_url):
         return False
 
     url = await resolve_account_avatar_url(link.label, link.platform, client)
@@ -224,14 +232,30 @@ async def backfill_link_avatars(
     *,
     limit: int = 20,
 ) -> int:
-    """Подтянуть аватары для ссылок без account_avatar_url. Возвращает число обновлений."""
-    todo = [ln for ln in links if ln.label and not ln.account_avatar_url][:limit]
+    """Подтянуть аватары для ссылок без нормального account_avatar_url."""
+    from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pics_batch
+
+    todo = [
+        ln
+        for ln in links
+        if ln.label
+        and (not ln.account_avatar_url or is_placeholder_avatar(ln.account_avatar_url))
+    ][:limit]
     if not todo:
         return 0
+
+    batch_pics = await lookup_profile_pics_batch(
+        [(ln.label, ln.platform) for ln in todo]
+    )
 
     updated = 0
     async with httpx.AsyncClient(headers=_FETCH_HEADERS, follow_redirects=True) as client:
         for link in todo:
+            pic = batch_pics.get(str(link.label).strip())
+            if pic and pic != link.account_avatar_url:
+                link.account_avatar_url = pic
+                updated += 1
+                continue
             if await ensure_link_avatar(db, link, client, force=True):
                 updated += 1
     if updated:

@@ -149,7 +149,7 @@ async def load_dashboard_page_data(
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
     stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account_term)
     links = list((await db.execute(stmt)).scalars().all())
-    await backfill_link_avatars(db, links, limit=24)
+    await backfill_link_avatars(db, links, limit=48)
     link_ids = [link.id for link in links]
 
     earliest_row = await db.execute(select(func.min(Link.created_at)))

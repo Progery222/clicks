@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # 0 = без лимита; иначе макс. переходов /r/ с одного IP в минуту
     redirect_rate_limit_per_minute: int = 120
 
+    # БД accountstats / social-dashboard (accounts.profile_pic), опционально
+    accountstats_database_url: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:
