@@ -9,23 +9,20 @@ _BOT_RE = re.compile(
     re.I,
 )
 
+_MOBILE_RE = re.compile(
+    r"Mobile|iPhone|iPod|Android|iPad|Tablet|Kindle|Silk/|PlayBook|"
+    r"webOS|BlackBerry|Opera Mini|IEMobile|Windows Phone",
+    re.I,
+)
+
 
 def parse_device_type(user_agent: str | None) -> str:
+    """Только «Мобильный» или «Десктоп» (боты, TV, планшеты без mobile → десктоп)."""
     if not user_agent or not str(user_agent).strip():
-        return "Неизвестно"
+        return "Десктоп"
     s = str(user_agent)
-    if _BOT_RE.search(s):
-        return "Бот"
-    if re.search(r"iPad|Tablet|Kindle|Silk/|PlayBook", s, re.I):
-        return "Планшет"
-    if re.search(
-        r"Mobile|iPhone|iPod|Android.*Mobile|webOS|BlackBerry|Opera Mini|IEMobile|Windows Phone",
-        s,
-        re.I,
-    ):
+    if _MOBILE_RE.search(s):
         return "Мобильный"
-    if re.search(r"Smart-?TV|SmartTV|AppleTV|CrKey|HbbTV|GoogleTV", s, re.I):
-        return "TV"
     return "Десктоп"
 
 
@@ -34,7 +31,7 @@ def parse_os(user_agent: str | None) -> str:
         return "Неизвестно"
     s = str(user_agent)
     if _BOT_RE.search(s):
-        return "Бот"
+        return "Другое"
     if re.search(r"Telegram", s, re.I):
         return "Telegram"
     if re.search(r"iPhone|iPad|iPod|CPU (?:iPhone )?OS", s):
@@ -46,7 +43,7 @@ def parse_os(user_agent: str | None) -> str:
     if "Mac OS X" in s or "Macintosh" in s:
         return "macOS"
     if "CrOS" in s:
-        return "Chrome OS"
+        return "Другое"
     if "Linux" in s:
-        return "Linux"
+        return "Другое"
     return "Другое"
