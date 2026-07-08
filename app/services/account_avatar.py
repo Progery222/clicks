@@ -168,6 +168,25 @@ async def _fetch_og_image(client: httpx.AsyncClient, page_url: str) -> str | Non
         return None
 
 
+async def _try_tiktok_oembed(client: httpx.AsyncClient, profile_url: str) -> str | None:
+    if "tiktok.com" not in profile_url.lower():
+        return None
+    try:
+        r = await client.get(
+            "https://www.tiktok.com/oembed",
+            params={"url": profile_url},
+            timeout=10.0,
+        )
+        if r.status_code != 200:
+            return None
+        thumb = r.json().get("thumbnail_url")
+        if thumb:
+            return str(thumb)
+    except Exception as exc:
+        log.debug("tiktok oembed failed for %s: %s", profile_url, exc)
+    return None
+
+
 async def resolve_account_avatar_url(
     label: str | None,
     platform: str | None,
@@ -181,6 +200,12 @@ async def resolve_account_avatar_url(
     stats_pic = await lookup_profile_pic(label, platform)
     if stats_pic:
         return stats_pic
+
+    profile_url = account_profile_url(label, platform)
+    if profile_url:
+        oembed = await _try_tiktok_oembed(client, profile_url)
+        if oembed:
+            return oembed
 
     tg_user = _telegram_username(label, platform)
     if tg_user:

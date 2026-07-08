@@ -2,6 +2,7 @@
 <span class="account-avatar account-avatar--{{ size | default('sm') }}{% if not avatar_url %} account-avatar--letter{% endif %}">
   {% if avatar_url %}
   <img class="account-avatar__img" src="{{ avatar_url }}" alt="" loading="lazy" decoding="async"
+    referrerpolicy="no-referrer"
     onerror="this.hidden=true; this.parentElement.classList.add('account-avatar--letter')">
   {% endif %}
   <span class="account-avatar__letter" aria-hidden="true">{{ (display or '?')[:1] | upper }}</span>

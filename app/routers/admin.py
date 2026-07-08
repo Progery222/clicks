@@ -34,6 +34,7 @@ from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_color, platform_label
 from app.services.label_match import account_label_display
 from app.services.account_avatar import backfill_link_avatars, refresh_link_avatar
+from app.services.admin_avatar import stream_link_avatar
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.security import verify_env_password
 from app.services.ip_lockout import (
@@ -177,6 +178,19 @@ async def login_post(
 async def logout(request: Request) -> RedirectResponse:
     request.session.clear()
     return RedirectResponse("/admin/login", status_code=302)
+
+
+@router.get("/avatar/{link_id}")
+async def link_avatar(
+    link_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin(request)
+    link = await db.get(Link, link_id)
+    if not link:
+        raise HTTPException(status_code=404, detail="link not found")
+    return await stream_link_avatar(db, link)
 
 
 @router.get("", response_class=HTMLResponse)

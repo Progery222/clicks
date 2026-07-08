@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.config import get_settings
-from app.services.label_match import account_label_display
+from app.services.label_match import account_label_display, normalize_account_label
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +35,13 @@ _PLATFORM_TO_ACCOUNTSTATS: dict[str, str] = {
     "threads": "THREADS",
 }
 
+_WHERE_USABLE = """
+    profile_pic IS NOT NULL
+    AND btrim(profile_pic) <> ''
+    AND profile_pic NOT ILIKE '%cdninstagram.com/rsrc.php%'
+    AND profile_pic NOT ILIKE '%google.com/s2/favicons%'
+"""
+
 
 def is_placeholder_avatar(url: str | None) -> bool:
     if not url or not str(url).strip():
@@ -43,8 +50,10 @@ def is_placeholder_avatar(url: str | None) -> bool:
 
 
 def _normalize_profile_url(url: str) -> str:
-    u = urlparse(url.strip())
+    u = urlparse(url.strip().split("?")[0].split("#")[0])
     host = (u.netloc or "").lower().removeprefix("www.")
+    if host == "threads.com":
+        host = "threads.net"
     path = (u.path or "").rstrip("/")
     return f"{host}{path}".casefold()
 
@@ -72,159 +81,131 @@ def _is_usable_pic(url: str | None) -> bool:
     return bool(url and str(url).strip() and not is_placeholder_avatar(url))
 
 
-async def lookup_profile_pic(label: str | None, platform: str | None) -> str | None:
-    """Найти profile_pic в accountstats по URL или platform+username."""
+def _label_norm_keys(label: str, platform: str | None) -> list[str]:
     from app.services.account_avatar import account_profile_url
 
+    keys: list[str] = []
+    s = str(label).strip()
+    profile_url = account_profile_url(s, platform)
+    if profile_url:
+        keys.append(_normalize_profile_url(profile_url))
+    if re.match(r"^https?://", s, re.I):
+        keys.append(_normalize_profile_url(s))
+    norm = normalize_account_label(s)
+    if norm:
+        keys.append(norm.casefold())
+    return list(dict.fromkeys(keys))
+
+
+async def _load_accountstats_index(
+    conn,
+) -> tuple[dict[str, str], dict[tuple[str, str], str], list[tuple[str, str, str]]]:
+    """norm_url → pic; (plat, user) → pic; список для fuzzy (plat, user, pic)."""
+    rows = (
+        await conn.execute(
+            text(
+                f"""
+                SELECT upper(platform) AS plat,
+                       lower(username) AS uname,
+                       {_SQL_NORM_URL} AS norm_url,
+                       profile_pic
+                FROM accounts
+                WHERE {_WHERE_USABLE}
+                """
+            )
+        )
+    ).all()
+
+    by_url: dict[str, str] = {}
+    by_user: dict[tuple[str, str], str] = {}
+    fuzzy: list[tuple[str, str, str]] = []
+    for plat, uname, norm_url, pic in rows:
+        if not _is_usable_pic(pic):
+            continue
+        pic_s = str(pic)
+        if norm_url:
+            by_url[str(norm_url)] = pic_s
+        if plat and uname:
+            by_user[(str(plat), str(uname))] = pic_s
+            fuzzy.append((str(plat), str(uname), pic_s))
+    return by_url, by_user, fuzzy
+
+
+def _fuzzy_match(
+    plat: str,
+    username: str,
+    fuzzy_rows: list[tuple[str, str, str]],
+) -> str | None:
+    user_cf = username.casefold()
+    for row_plat, row_user, pic in fuzzy_rows:
+        if row_plat != plat:
+            continue
+        if row_user == user_cf or user_cf in row_user or row_user in user_cf:
+            return pic
+    return None
+
+
+async def lookup_profile_pic(label: str | None, platform: str | None) -> str | None:
+    """Найти profile_pic в accountstats по URL или platform+username."""
     engine = _engine()
     if engine is None or not label or not str(label).strip():
         return None
 
-    profile_url = account_profile_url(label, platform)
     username = account_label_display(label)
     plat = _accountstats_platform(platform)
-
-    norm_url = _normalize_profile_url(profile_url) if profile_url else None
-
-    _WHERE_USABLE = """
-        profile_pic IS NOT NULL
-        AND btrim(profile_pic) <> ''
-        AND profile_pic NOT ILIKE '%cdninstagram.com/rsrc.php%'
-    """
+    norm_keys = _label_norm_keys(str(label).strip(), platform)
 
     try:
         async with engine.connect() as conn:
-            row = None
-            if norm_url:
-                row = (
-                    await conn.execute(
-                        text(
-                            f"""
-                            SELECT profile_pic FROM accounts
-                            WHERE {_WHERE_USABLE}
-                              AND {_SQL_NORM_URL} = :norm_url
-                            LIMIT 1
-                            """
-                        ),
-                        {"norm_url": norm_url},
-                    )
-                ).first()
-            if not row and plat and username:
-                row = (
-                    await conn.execute(
-                        text(
-                            f"""
-                            SELECT profile_pic FROM accounts
-                            WHERE {_WHERE_USABLE}
-                              AND upper(platform) = :plat
-                              AND lower(username) = lower(:username)
-                            LIMIT 1
-                            """
-                        ),
-                        {"plat": plat, "username": username},
-                    )
-                ).first()
+            by_url, by_user, fuzzy = await _load_accountstats_index(conn)
+            for nk in norm_keys:
+                if nk in by_url:
+                    return by_url[nk]
+            if plat and username:
+                pic = by_user.get((plat, username.casefold()))
+                if pic:
+                    return pic
+                pic = _fuzzy_match(plat, username, fuzzy)
+                if pic:
+                    return pic
     except Exception as exc:
         log.warning("accountstats avatar lookup failed: %s", exc)
         return None
 
-    if not row:
-        return None
-    pic = row[0]
-    return str(pic) if _is_usable_pic(pic) else None
+    return None
 
 
 async def lookup_profile_pics_batch(
     items: list[tuple[str, str | None]],
 ) -> dict[str, str]:
     """Пакетный поиск: ключ — label, значение — profile_pic."""
-    from app.services.account_avatar import account_profile_url
-
     engine = _engine()
     if engine is None or not items:
-        return {}
-
-    norm_urls: list[str] = []
-    pairs: list[tuple[str, str]] = []
-    label_keys: dict[str, str] = {}
-
-    for label, platform in items:
-        if not label or not str(label).strip():
-            continue
-        key = str(label).strip()
-        profile_url = account_profile_url(key, platform)
-        username = account_label_display(key)
-        plat = _accountstats_platform(platform)
-        if profile_url:
-            norm = _normalize_profile_url(profile_url)
-            norm_urls.append(norm)
-            label_keys[norm] = key
-        if plat and username:
-            pair = (plat, username.casefold())
-            pairs.append(pair)
-            label_keys[f"{pair[0]}:{pair[1]}"] = key
-
-    if not norm_urls and not pairs:
         return {}
 
     out: dict[str, str] = {}
     try:
         async with engine.connect() as conn:
-            if norm_urls:
-                rows = (
-                    await conn.execute(
-                        text(
-                            f"""
-                            SELECT {_SQL_NORM_URL} AS norm_url, profile_pic
-                            FROM accounts
-                            WHERE profile_pic IS NOT NULL
-                              AND btrim(profile_pic) <> ''
-                              AND profile_pic NOT ILIKE '%cdninstagram.com/rsrc.php%'
-                              AND {_SQL_NORM_URL} = ANY(:urls)
-                            """
-                        ),
-                        {"urls": list(set(norm_urls))},
-                    )
-                ).all()
-                for norm_url, pic in rows:
-                    if not _is_usable_pic(pic):
-                        continue
-                    label = label_keys.get(norm_url)
-                    if label:
-                        out[label] = str(pic)
-
-            missing = [it for it in items if it[0] and str(it[0]).strip() not in out]
-            if missing and pairs:
-                plats = list({p[0] for p in pairs})
-                users = list({p[1] for p in pairs})
-                rows = (
-                    await conn.execute(
-                        text(
-                            """
-                            SELECT upper(platform) AS plat, lower(username) AS uname, profile_pic
-                            FROM accounts
-                            WHERE profile_pic IS NOT NULL
-                              AND btrim(profile_pic) <> ''
-                              AND profile_pic NOT ILIKE '%cdninstagram.com/rsrc.php%'
-                              AND upper(platform) = ANY(:plats)
-                              AND lower(username) = ANY(:users)
-                            """
-                        ),
-                        {"plats": plats, "users": users},
-                    )
-                ).all()
-                pair_to_pic = {
-                    (str(plat), str(uname)): str(pic)
-                    for plat, uname, pic in rows
-                    if _is_usable_pic(pic)
-                }
-                for label, platform in missing:
-                    key = str(label).strip()
-                    username = account_label_display(key)
-                    plat = _accountstats_platform(platform)
-                    if not plat or not username:
-                        continue
-                    pic = pair_to_pic.get((plat, username.casefold()))
+            by_url, by_user, fuzzy = await _load_accountstats_index(conn)
+            for label, platform in items:
+                if not label or not str(label).strip():
+                    continue
+                key = str(label).strip()
+                if key in out:
+                    continue
+                username = account_label_display(key)
+                plat = _accountstats_platform(platform)
+                for nk in _label_norm_keys(key, platform):
+                    pic = by_url.get(nk)
+                    if pic:
+                        out[key] = pic
+                        break
+                if key in out:
+                    continue
+                if plat and username:
+                    pic = by_user.get((plat, username.casefold()))
+                    if not pic:
+                        pic = _fuzzy_match(plat, username, fuzzy)
                     if pic:
                         out[key] = pic
     except Exception as exc:

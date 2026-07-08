@@ -5,7 +5,7 @@
   <div class="row between wrap stats-head">
     <div class="stats-head__main">
       <div class="stats-head__identity">
-        {% with avatar_url=link.account_avatar_url, display=link.label or link.slug, size='lg' %}
+        {% with avatar_url=('/admin/avatar/' ~ link.id), display=link.label or link.slug, size='lg' %}
         {% include "_account_avatar.html" %}
         {% endwith %}
         <div class="stats-head__text">
