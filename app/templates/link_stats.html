@@ -69,6 +69,8 @@
     <p class="muted small stats-clear-hint">Безвозвратно удаляются все сохранённые клики по этой ссылке (IP, гео, cookie‑идентификатор посетителя в рамках записи).</p>
   </div>
 
+  <div class="stats-tops-grid">
+  <div>
   <h2 class="section-title">Топ стран</h2>
   <div id="countries-live-root">
   {% if not countries %}
@@ -95,6 +97,48 @@
   </div>
   {% endif %}
   </div>
+  </div>
+
+  <div>
+  <h2 class="section-title">Топ ОС</h2>
+  <div id="os-live-root">
+  {% if not os_rows %}
+  <p class="muted">Нет данных за период.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>ОС</th><th class="num">Кликов</th></tr></thead>
+      <tbody>
+        {% for label, n in os_rows %}
+        <tr><td>{{ label }}</td><td class="num">{{ n }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  </div>
+  </div>
+
+  <div>
+  <h2 class="section-title">Тип устройства</h2>
+  <div id="devices-live-root">
+  {% if not device_rows %}
+  <p class="muted">Нет данных за период.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Устройство</th><th class="num">Кликов</th></tr></thead>
+      <tbody>
+        {% for label, n in device_rows %}
+        <tr><td>{{ label }}</td><td class="num">{{ n }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  </div>
+  </div>
+  </div>
 
 </section>
 <script>
@@ -107,6 +151,8 @@ document.addEventListener("DOMContentLoaded", function () {
   var elTotal = document.getElementById("stat-live-total");
   var elUniq = document.getElementById("stat-live-uniques");
   var countriesRoot = document.getElementById("countries-live-root");
+  var osRoot = document.getElementById("os-live-root");
+  var devicesRoot = document.getElementById("devices-live-root");
   var filterForm = document.querySelector(".filter-bar");
   var presetBtn = document.getElementById("stats-preset-cycle");
   var dateToggle = document.getElementById("stats-toggle-dates");
@@ -132,6 +178,23 @@ document.addEventListener("DOMContentLoaded", function () {
     var d = document.createElement("div");
     d.textContent = String(s);
     return d.innerHTML;
+  }
+
+  function renderTopTable(root, rows, colLabel, keyField) {
+    if (!root) return;
+    var html = "";
+    if (!rows || !rows.length) {
+      html += "<p class=\"muted\">Нет данных за период.</p>";
+    } else {
+      html += "<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>" + esc(colLabel) + "</th><th class=\"num\">Кликов</th></tr></thead><tbody>";
+      rows.forEach(function (row) {
+        var label = row[keyField] ? row[keyField] : (row.code ? row.code : "—");
+        if (keyField === "code" && !row.code) label = "—";
+        html += "<tr><td>" + esc(String(label)) + "</td><td class=\"num\">" + esc(String(row.count)) + "</td></tr>";
+      });
+      html += "</tbody></table></div>";
+    }
+    root.innerHTML = html;
   }
 
   function renderCountries(data) {
@@ -181,6 +244,8 @@ document.addEventListener("DOMContentLoaded", function () {
         if (elTotal) elTotal.textContent = String(data.total);
         if (elUniq) elUniq.textContent = String(data.uniques);
         renderCountries(data);
+        renderTopTable(osRoot, data.os, "ОС", "label");
+        renderTopTable(devicesRoot, data.devices, "Устройство", "label");
       })
       .catch(function () {});
   }

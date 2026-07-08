@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_bar_chart.html" import bar_chart %}
+{% block title %}Показатели — Bio links{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="row between wrap">
+    <div>
+      <h1 class="page-title">Показатели</h1>
+      <p class="muted small">Клики за выбранный период{% if filter_profile != 'all' or filter_platform != 'all' %} (с учётом фильтров){% endif %} — <strong>UTC</strong>.</p>
+    </div>
+    <a class="btn btn-secondary" href="/admin">К ссылкам</a>
+  </div>
+
+  <div class="platform-bar">
+    <div class="platform-bar__pills">
+      {% for pl in platform_filters %}
+      <a class="platform-pill{% if filter_platform == pl.id %} platform-pill--active{% endif %}"
+        href="{{ indicators_filter_href(filter_profile, pl.id) }}">
+        {% if pl.color %}<span class="platform-pill__dot" style="background: {{ pl.color }}"></span>{% endif %}
+        <span class="platform-pill__label">{{ pl.label }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="dash-period">
+    <div class="dash-period__pills" role="group" aria-label="Период">
+      <a class="platform-pill{% if active_preset == 'today' %} platform-pill--active{% endif %}"
+        href="{{ period_hrefs.today }}">Сегодня</a>
+      <a class="platform-pill{% if active_preset == 'week' %} platform-pill--active{% endif %}"
+        href="{{ period_hrefs.week }}">Неделя</a>
+      <a class="platform-pill{% if active_preset == 'all' %} platform-pill--active{% endif %}"
+        href="{{ period_hrefs.all }}">Всё время</a>
+    </div>
+  </div>
+
+  <div class="kpi-grid kpi-grid--dash">
+    <div class="kpi-card">
+      <span class="kpi-card__num">{{ period_total }}</span>
+      <span class="kpi-card__lbl">кликов за период</span>
+      <span class="kpi-card__hint muted small">{{ period_label }}</span>
+    </div>
+    <div class="kpi-card kpi-card--accent">
+      <span class="kpi-card__num">{{ period_uniques }}</span>
+      <span class="kpi-card__lbl">уникальных</span>
+    </div>
+  </div>
+
+  <div class="indicators-grid">
+    <div class="indicators-panel">
+      <h2 class="section-title section-title--sm">Операционные системы</h2>
+      {{ bar_chart(os_chart) }}
+    </div>
+    <div class="indicators-panel">
+      <h2 class="section-title section-title--sm">Тип устройства</h2>
+      {{ bar_chart(device_chart) }}
+    </div>
+    <div class="indicators-panel">
+      <h2 class="section-title section-title--sm">Профили</h2>
+      {{ bar_chart(profile_chart) }}
+    </div>
+    <div class="indicators-panel">
+      <h2 class="section-title section-title--sm">Платформы</h2>
+      {{ bar_chart(platform_chart) }}
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -4,7 +4,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Click, Link, Link
+from app.models import Click, Link, Profile
+from app.services.ua_parse import parse_device_type, parse_os
 
 
 async def stats_summary(
@@ -85,6 +86,147 @@ async def top_countries(
     )
     rows = (await session.execute(stmt)).all()
     return [(r[0], int(r[1])) for r in rows]
+
+
+async def _top_from_user_agents(
+    session: AsyncSession,
+    start: datetime,
+    end: datetime,
+    key_fn,
+    *,
+    link_id: uuid.UUID | None = None,
+    link_ids: list[uuid.UUID] | None = None,
+    limit: int = 10,
+) -> list[tuple[str, int]]:
+    where = [Click.created_at >= start, Click.created_at < end]
+    if link_id is not None:
+        where.append(Click.link_id == link_id)
+    elif link_ids:
+        where.append(Click.link_id.in_(link_ids))
+    else:
+        return []
+
+    rows = (
+        await session.execute(
+            select(Click.user_agent, func.count().label("c"))
+            .where(*where)
+            .group_by(Click.user_agent)
+        )
+    ).all()
+
+    merged: dict[str, int] = {}
+    for ua, cnt in rows:
+        key = key_fn(ua)
+        merged[key] = merged.get(key, 0) + int(cnt)
+    return sorted(merged.items(), key=lambda item: -item[1])[:limit]
+
+
+async def top_os(
+    session: AsyncSession,
+    link_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+    limit: int = 10,
+) -> list[tuple[str, int]]:
+    return await _top_from_user_agents(
+        session, start, end, parse_os, link_id=link_id, limit=limit
+    )
+
+
+async def top_device_types(
+    session: AsyncSession,
+    link_id: uuid.UUID,
+    start: datetime,
+    end: datetime,
+    limit: int = 10,
+) -> list[tuple[str, int]]:
+    return await _top_from_user_agents(
+        session, start, end, parse_device_type, link_id=link_id, limit=limit
+    )
+
+
+async def top_os_for_links(
+    session: AsyncSession,
+    link_ids: list[uuid.UUID],
+    start: datetime,
+    end: datetime,
+    limit: int = 12,
+) -> list[tuple[str, int]]:
+    return await _top_from_user_agents(
+        session, start, end, parse_os, link_ids=link_ids, limit=limit
+    )
+
+
+async def top_device_types_for_links(
+    session: AsyncSession,
+    link_ids: list[uuid.UUID],
+    start: datetime,
+    end: datetime,
+    limit: int = 12,
+) -> list[tuple[str, int]]:
+    return await _top_from_user_agents(
+        session, start, end, parse_device_type, link_ids=link_ids, limit=limit
+    )
+
+
+async def profile_click_stats(
+    session: AsyncSession,
+    link_ids: list[uuid.UUID],
+    start: datetime,
+    end: datetime,
+) -> list[dict]:
+    if not link_ids:
+        return []
+    name = Profile.name.label("profile_name")
+    color = Profile.color.label("profile_color")
+    stmt = (
+        select(
+            name,
+            color,
+            func.count().label("clicks"),
+            func.count(func.distinct(Click.dedupe_key)).label("uniques"),
+        )
+        .select_from(Click)
+        .join(Link, Click.link_id == Link.id)
+        .outerjoin(Profile, Link.profile_id == Profile.id)
+        .where(
+            Click.link_id.in_(link_ids),
+            Click.created_at >= start,
+            Click.created_at < end,
+        )
+        .group_by(Profile.id, Profile.name, Profile.color)
+        .order_by(func.count().desc())
+    )
+    rows = (await session.execute(stmt)).all()
+    out: list[dict] = []
+    for r in rows:
+        out.append(
+            {
+                "name": r.profile_name or "Без профиля",
+                "color": r.profile_color or "#525a70",
+                "clicks": int(r.clicks),
+                "uniques": int(r.uniques),
+            }
+        )
+    return out
+
+
+def bar_chart_items(rows: list[tuple[str, int]], *, colors: dict[str, str] | None = None) -> list[dict]:
+    """Подготовка данных для столбиковой диаграммы (label, count, pct, color)."""
+    if not rows:
+        return []
+    max_count = max(n for _, n in rows) or 1
+    items: list[dict] = []
+    for label, count in rows:
+        item = {
+            "label": label,
+            "count": count,
+            "pct": max(4, round(100 * count / max_count)),
+        }
+        if colors and label in colors:
+            item["color"] = colors[label]
+        items.append(item)
+    return items
 
 
 async def dashboard_click_counts(session: AsyncSession) -> dict[uuid.UUID, tuple[int, int]]:

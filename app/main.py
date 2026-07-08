@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -14,7 +14,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import get_settings
 from app.jobs import cleanup_old_clicks
 from app.middleware.ip_ban import IpAuthBanMiddleware
+from app.database import get_db
 from app.routers import admin, api_v1, health, redirect
+from app.routers.admin import render_indicators_page
 from app.services.dbip_country_download import ensure_dbip_country_db
 from app.services.geolite_download import ensure_geolite_city_db
 from app.services.geoip import (
@@ -32,7 +34,7 @@ class NoCacheAdminHtmlMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         path = request.url.path
-        if path.startswith("/admin") or path.startswith("/api") or path == "/privacy":
+        if path.startswith("/admin") or path.startswith("/api") or path in ("/privacy", "/indicators"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Vary"] = "Cookie"
@@ -101,6 +103,26 @@ def create_app() -> FastAPI:
     @app.get("/privacy", response_class=HTMLResponse)
     async def privacy_page(request: Request):
         return templates.TemplateResponse("privacy.html", {"request": request})
+
+    @app.get("/indicators", response_class=HTMLResponse, include_in_schema=False)
+    async def indicators_page(
+        request: Request,
+        db=Depends(get_db),
+        profile: str = Query("all"),
+        platform: str = Query("all"),
+        date_from: str | None = Query(None, alias="from"),
+        date_to: str | None = Query(None, alias="to"),
+        preset: str | None = Query(None),
+    ):
+        return await render_indicators_page(
+            request,
+            db,
+            profile=profile,
+            platform=platform,
+            date_from=date_from,
+            date_to=date_to,
+            preset=preset,
+        )
 
     app.include_router(health.router)
     app.include_router(api_v1.router)

@@ -1,0 +1,17 @@
+{% macro bar_chart(items, empty_msg='Нет данных за период.') %}
+{% if not items %}
+<p class="muted">{{ empty_msg }}</p>
+{% else %}
+<div class="bar-chart" role="img">
+  {% for row in items %}
+  <div class="bar-chart__row">
+    <span class="bar-chart__label" title="{{ row.label }}">{{ row.label }}</span>
+    <div class="bar-chart__track">
+      <div class="bar-chart__bar" style="width: {{ row.pct }}%;{% if row.color %} --bar-color: {{ row.color }};{% endif %}"></div>
+    </div>
+    <span class="bar-chart__value">{{ row.count }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

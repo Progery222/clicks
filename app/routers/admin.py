@@ -45,13 +45,22 @@ from app.services.ip_lockout import (
 )
 from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_path
 from app.services.stats import (
+    aggregate_clicks_for_links,
+    bar_chart_items,
     click_counts_for_links_period,
     click_day_bucket_utc,
     dashboard_click_counts,
+    platform_click_stats,
+    profile_click_stats,
     stats_summary,
     top_countries,
+    top_device_types,
+    top_device_types_for_links,
+    top_os,
+    top_os_for_links,
 )
 from app.stats_range import (
+    DASHBOARD_DEFAULT_PRESET,
     active_preset,
     dashboard_stats_range,
     form_period_dates,
@@ -70,6 +79,32 @@ _templates_dir = str(Path(__file__).resolve().parent.parent / "templates")
 templates = Jinja2Templates(directory=_templates_dir)
 templates.env.globals["admin_filter_href"] = (
     lambda prof, plat: "/admin" + build_filter_query(prof, plat)
+)
+
+
+def _indicators_filter_href(
+    profile: str,
+    platform: str,
+    *,
+    active_preset: str,
+    period_from: str,
+    period_to: str,
+    preset: str | None = None,
+) -> str:
+    p = preset
+    if p is None and active_preset != "custom":
+        p = active_preset if active_preset != "all" else None
+    return "/indicators" + build_filter_query(
+        profile,
+        platform,
+        preset=p,
+        date_from=period_from if active_preset == "custom" else None,
+        date_to=period_to if active_preset == "custom" else None,
+    )
+
+
+templates.env.globals["indicators_filter_href"] = (
+    lambda prof, plat: _indicators_filter_href(prof, plat, active_preset="all", period_from="", period_to="")
 )
 
 
@@ -761,6 +796,8 @@ async def link_stats_data(
     )
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
+    os_rows = await top_os(session=db, link_id=link.id, start=start, end=end)
+    device_rows = await top_device_types(session=db, link_id=link.id, start=start, end=end)
     geoip_db_present = (
         resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
     )
@@ -770,6 +807,8 @@ async def link_stats_data(
             "total": total,
             "uniques": uniq,
             "countries": [{"code": c or "", "count": n} for c, n in countries],
+            "os": [{"label": label, "count": n} for label, n in os_rows],
+            "devices": [{"label": label, "count": n} for label, n in device_rows],
             "countries_missing_code": countries_missing_code,
             "geoip_db_present": geoip_db_present,
         }
@@ -799,6 +838,8 @@ async def link_stats(
     period_from, period_to = form_period_dates(start, end)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
+    os_rows = await top_os(session=db, link_id=link.id, start=start, end=end)
+    device_rows = await top_device_types(session=db, link_id=link.id, start=start, end=end)
 
     geoip_db_present = (
         resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
@@ -814,6 +855,8 @@ async def link_stats(
             "total": total,
             "uniques": uniq,
             "countries": countries,
+            "os_rows": os_rows,
+            "device_rows": device_rows,
             "period_from": period_from,
             "period_to": period_to,
             "active_preset": active,
@@ -821,6 +864,154 @@ async def link_stats(
             "geoip_db_present": geoip_db_present,
             "countries_missing_code": countries_missing_code,
         },
+    )
+
+
+async def render_indicators_page(
+    request: Request,
+    db: AsyncSession,
+    *,
+    profile: str = "all",
+    platform: str = "all",
+    date_from: str | None = None,
+    date_to: str | None = None,
+    preset: str | None = None,
+):
+    _require_admin(request)
+    earliest = await earliest_link_created_at(db)
+    active = active_preset(
+        date_from, date_to, preset, default=DASHBOARD_DEFAULT_PRESET
+    )
+    start, end = resolve_stats_period(
+        date_from, date_to, preset, earliest=earliest
+    )
+    period_from, period_to = form_period_dates(start, end)
+
+    id_stmt = apply_link_filters(select(Link.id), profile=profile, platform=platform)
+    link_ids = [row[0] for row in (await db.execute(id_stmt)).all()]
+
+    period_total, period_uniques = await aggregate_clicks_for_links(
+        db, link_ids, start, end
+    )
+    os_rows = await top_os_for_links(db, link_ids, start, end)
+    device_rows = await top_device_types_for_links(db, link_ids, start, end)
+    profile_stats = await profile_click_stats(db, link_ids, start, end)
+    plat_stats_raw = await platform_click_stats(db, link_ids, start, end)
+
+    os_chart = bar_chart_items(os_rows)
+    device_chart = bar_chart_items(device_rows)
+    profile_chart = bar_chart_items(
+        [(p["name"], p["clicks"]) for p in profile_stats],
+        colors={p["name"]: p["color"] for p in profile_stats},
+    )
+    platform_chart = bar_chart_items(
+        [
+            (
+                "Без платформы" if p["platform"] == "none" else platform_label(p["platform"]),
+                p["clicks"],
+            )
+            for p in plat_stats_raw
+        ],
+        colors={
+            (
+                "Без платформы" if p["platform"] == "none" else platform_label(p["platform"])
+            ): (
+                "#525a70" if p["platform"] == "none" else platform_color(p["platform"])
+            )
+            for p in plat_stats_raw
+        },
+    )
+
+    platform_filters = [
+        {"id": "all", "label": "Все", "color": None},
+    ]
+    for p in PLATFORMS:
+        platform_filters.append(
+            {
+                "id": p["id"],
+                "label": p["label"],
+                "color": p["color"],
+            }
+        )
+    platform_filters.append(
+        {"id": "none", "label": "Без платформы", "color": "#525a70"}
+    )
+
+    period_hrefs = {
+        "today": _indicators_filter_href(
+            profile, platform, active_preset=active, period_from=period_from,
+            period_to=period_to, preset="today",
+        ),
+        "week": _indicators_filter_href(
+            profile, platform, active_preset=active, period_from=period_from,
+            period_to=period_to, preset="week",
+        ),
+        "all": _indicators_filter_href(
+            profile, platform, active_preset=active, period_from=period_from,
+            period_to=period_to, preset="all",
+        ),
+    }
+
+    if active == "today":
+        period_label = "Сегодня (UTC)"
+    elif active == "week":
+        period_label = "7 дней"
+    elif active == "all":
+        period_label = "Всё время"
+    else:
+        period_label = f"{period_from} — {period_to}"
+
+    def indicators_href(prof: str, plat: str) -> str:
+        return _indicators_filter_href(
+            prof,
+            plat,
+            active_preset=active,
+            period_from=period_from,
+            period_to=period_to,
+            preset=active if active != "custom" else None,
+        )
+
+    return templates.TemplateResponse(
+        "indicators.html",
+        {
+            "request": request,
+            "filter_profile": profile,
+            "filter_platform": platform,
+            "active_preset": active,
+            "period_from": period_from,
+            "period_to": period_to,
+            "period_label": period_label,
+            "period_total": period_total,
+            "period_uniques": period_uniques,
+            "period_hrefs": period_hrefs,
+            "platform_filters": platform_filters,
+            "os_chart": os_chart,
+            "device_chart": device_chart,
+            "profile_chart": profile_chart,
+            "platform_chart": platform_chart,
+            "indicators_filter_href": indicators_href,
+        },
+    )
+
+
+@router.get("/indicators", response_class=HTMLResponse)
+async def admin_indicators_alias(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    profile: str = Query("all"),
+    platform: str = Query("all"),
+    date_from: str | None = Query(None, alias="from"),
+    date_to: str | None = Query(None, alias="to"),
+    preset: str | None = Query(None),
+):
+    return await render_indicators_page(
+        request,
+        db,
+        profile=profile,
+        platform=platform,
+        date_from=date_from,
+        date_to=date_to,
+        preset=preset,
     )
 
 
