@@ -38,7 +38,7 @@ foreach (\$vars as \$key => \$value) {
 }
 
 \$weak = [];
-foreach (['SECRET_KEY', 'ADMIN_PASSWORD'] as \$k) {
+foreach (['SECRET_KEY', 'ADMIN_PASSWORD', 'API_TOKEN'] as \$k) {
   \$row = \$app->environment_variables()->where('key', \$k)->where('is_preview', false)->first();
   if (!\$row || trim((string)\$row->value) === '') {
     \$weak[] = \$k . ' (missing)';
@@ -47,7 +47,7 @@ foreach (['SECRET_KEY', 'ADMIN_PASSWORD'] as \$k) {
 if (\$weak) {
   echo 'WARN: check secrets: ' . implode(', ', \$weak) . \"\\n\";
 } else {
-  echo \"SECRET_KEY and ADMIN_PASSWORD are set\\n\";
+  echo \"SECRET_KEY, ADMIN_PASSWORD and API_TOKEN are set\\n\";
 }
 "
 

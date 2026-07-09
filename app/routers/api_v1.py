@@ -31,6 +31,7 @@ from app.services.account_avatar import bootstrap_link_avatar
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.url_validation import is_valid_destination_url
 from app.services.ip_lockout import clear_api_failures, client_ip, record_api_token_failure
+from app.services.rate_limit import allow_request
 from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_path
 from app.services.stats import (
     click_day_bucket_utc,
@@ -57,6 +58,13 @@ def _safe_token_compare(a: str, b: str) -> bool:
 
 async def require_api_token(request: Request, db: AsyncSession = Depends(get_db)) -> None:
     settings = get_settings()
+    ip = client_ip(request)
+    if not allow_request(ip, limit_per_minute=settings.api_rate_limit_per_minute, bucket="api"):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many API requests",
+            headers={"Retry-After": "60"},
+        )
     expected = (settings.api_token or "").strip()
     if not expected:
         raise HTTPException(
@@ -70,7 +78,6 @@ async def require_api_token(request: Request, db: AsyncSession = Depends(get_db)
         token = auth[7:].strip()
     elif api_key:
         token = api_key
-    ip = client_ip(request)
     if token and _safe_token_compare(token, expected):
         await clear_api_failures(db, ip)
         return

@@ -45,6 +45,8 @@ class Settings(BaseSettings):
 
     # 0 = без лимита; иначе макс. переходов /r/ с одного IP в минуту
     redirect_rate_limit_per_minute: int = 120
+    # 0 = без лимита; иначе макс. запросов /api/v1 с одного IP в минуту
+    api_rate_limit_per_minute: int = 300
 
     # БД accountstats / social-dashboard (accounts.profile_pic), опционально
     accountstats_database_url: str | None = None
@@ -77,6 +79,8 @@ class Settings(BaseSettings):
             raise RuntimeError("SECRET_KEY must be set in production (APP_ENV=production)")
         if self.admin_password.strip() in ("", "admin"):
             raise RuntimeError("ADMIN_PASSWORD must be changed in production")
+        if not (self.api_token or "").strip():
+            raise RuntimeError("API_TOKEN must be set in production (APP_ENV=production)")
 
 
 @lru_cache
