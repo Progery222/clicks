@@ -52,14 +52,75 @@ _OG_IMAGE_PATTERNS = (
 _DOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$", re.I)
 
 
-_TIKTOK_AVATAR_RE = re.compile(
-    r'"(?:avatarLarger|avatarMedium|avatarThumb)"\s*:\s*"(https:[^"]+)"',
+
+_TIKTOK_UNIVERSAL_DATA_RE = re.compile(
+    r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([^<]+)</script>',
     re.I,
 )
 
+_TIKTOK_MOBILE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+_TIKTOK_MIN_HTML_BYTES = 8_000
+
 
 def _decode_embedded_cdn_url(raw: str) -> str:
-    return unescape(raw.replace("\\u002F", "/").replace("\\/", "/"))
+    url = unescape(raw.replace("\\u002F", "/").replace("\\/", "/"))
+    if url.startswith("https:"):
+        return url
+    if url.startswith("http:"):
+        return url
+    return url
+
+
+def _normalize_tiktok_profile_url(url: str) -> str | None:
+    if "tiktok.com" not in url.lower():
+        return None
+    try:
+        parsed = urlparse(url.strip())
+    except Exception:
+        return None
+    host = (parsed.netloc or "").lower().removeprefix("www.")
+    if host not in ("tiktok.com", "m.tiktok.com"):
+        return None
+    parts = [p for p in (parsed.path or "").split("/") if p]
+    if not parts:
+        return None
+    user = parts[0].lstrip("@").split("?")[0].strip()
+    if not user:
+        return None
+    return f"https://www.tiktok.com/@{user}"
+
+
+def _find_tiktok_avatar_in_json_blob(raw: str) -> str | None:
+    for key in ("avatarLarger", "avatarMedium", "avatarThumb"):
+        pat = re.compile(rf'"{re.escape(key)}"\s*:\s*"((?:https:)?[^"]+)"')
+        m = pat.search(raw)
+        if not m:
+            continue
+        url = _decode_embedded_cdn_url(m.group(1))
+        if not url.startswith("http"):
+            url = f"https:{url}" if url.startswith("//") else f"https://{url.lstrip(':')}"
+        if is_safe_fetch_url(url):
+            return url
+    return None
+
+
+def extract_tiktok_avatar_from_html(html: str) -> str | None:
+    """Парсинг avatarLarger из HTML профиля TikTok (нужен mobile User-Agent при fetch)."""
+    chunk = html[:1_500_000]
+    uni = _TIKTOK_UNIVERSAL_DATA_RE.search(chunk)
+    if uni:
+        pic = _find_tiktok_avatar_in_json_blob(uni.group(1))
+        if pic:
+            return pic
+    return _find_tiktok_avatar_in_json_blob(chunk)
 
 
 def _first_path_segment(path: str) -> str | None:
@@ -324,19 +385,24 @@ async def _fetch_og_image(client: httpx.AsyncClient, page_url: str) -> str | Non
 
 
 async def _try_tiktok_oembed(client: httpx.AsyncClient, profile_url: str) -> str | None:
+    """oEmbed для профилей TikTok thumbnail_url больше не отдаёт — оставлено для совместимости."""
+    _ = client
     if "tiktok.com" not in profile_url.lower():
+        return None
+    norm = _normalize_tiktok_profile_url(profile_url)
+    if not norm:
         return None
     try:
         r = await safe_get(
             client,
             "https://www.tiktok.com/oembed",
-            params={"url": profile_url},
+            params={"url": norm},
             timeout=10.0,
         )
         if r.status_code != 200:
             return None
         thumb = r.json().get("thumbnail_url")
-        if thumb:
+        if thumb and is_safe_fetch_url(str(thumb)):
             return str(thumb)
     except Exception as exc:
         log.debug("tiktok oembed failed for %s: %s", profile_url, exc)
@@ -344,19 +410,22 @@ async def _try_tiktok_oembed(client: httpx.AsyncClient, profile_url: str) -> str
 
 
 async def _try_tiktok_avatar_html(client: httpx.AsyncClient, profile_url: str) -> str | None:
-    if "tiktok.com" not in profile_url.lower() or not is_safe_fetch_url(profile_url):
+    _ = client
+    norm = _normalize_tiktok_profile_url(profile_url)
+    if not norm or not is_safe_fetch_url(norm):
         return None
     try:
-        r = await safe_get(client, profile_url, timeout=15.0)
+        async with create_safe_http_client(headers=_TIKTOK_MOBILE_HEADERS, timeout=18.0) as tik_client:
+            r = await safe_get(tik_client, norm, timeout=18.0)
         if r.status_code != 200:
             return None
-        m = _TIKTOK_AVATAR_RE.search(r.text[:900_000])
-        if not m:
+        if len(r.text) < _TIKTOK_MIN_HTML_BYTES:
+            log.debug("tiktok profile shell page (len=%s) for %s", len(r.text), norm)
             return None
-        return _decode_embedded_cdn_url(m.group(1))
+        return extract_tiktok_avatar_from_html(r.text)
     except Exception as exc:
         log.debug("tiktok avatar html failed for %s: %s", profile_url, exc)
-    return None
+        return None
 
 
 async def resolve_account_avatar_url(
@@ -375,12 +444,12 @@ async def resolve_account_avatar_url(
 
     profile_url = account_profile_url(label, platform)
     if profile_url:
-        oembed = await _try_tiktok_oembed(client, profile_url)
-        if oembed:
-            return oembed
         tiktok_pic = await _try_tiktok_avatar_html(client, profile_url)
         if tiktok_pic:
             return tiktok_pic
+        oembed = await _try_tiktok_oembed(client, profile_url)
+        if oembed:
+            return oembed
 
     tg_user = _telegram_username(label, platform)
     if tg_user:
