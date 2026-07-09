@@ -2051,6 +2051,64 @@ button[type="submit"].btn-primary {
   margin-top: 1.25rem;
 }
 
+.stats-collapsible__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.stats-collapsible__toggle .section-title {
+  margin: 0;
+}
+
+.stats-collapsible__chevron {
+  flex-shrink: 0;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.stats-collapsible__toggle--open .stats-collapsible__chevron {
+  transform: rotate(45deg);
+  margin-top: -0.2rem;
+}
+
+.stats-collapsible__toggle:hover .stats-collapsible__title {
+  color: var(--accent);
+}
+
+.stats-collapsible__toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.stats-collapsible__body--hidden {
+  display: none;
+}
+
+.stats-collapsible__body {
+  margin-top: 0.85rem;
+}
+
+.indicators-panel--collapsible {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
 .stats-charts-grid .indicators-panel--wide {
   grid-column: 1 / -1;
 }

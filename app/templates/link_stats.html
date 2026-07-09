@@ -65,10 +65,16 @@
   </div>
 
   <div class="indicators-grid stats-charts-grid">
-    <div class="indicators-panel indicators-panel--wide">
-      <h2 class="section-title section-title--sm">Клики по дням</h2>
-      <div id="clicks-chart-live-root">
-        {{ bar_chart(clicks_chart) }}
+    <div class="indicators-panel indicators-panel--wide indicators-panel--collapsible">
+      <button type="button" class="stats-collapsible__toggle" id="clicks-chart-toggle"
+              aria-expanded="false" aria-controls="clicks-chart-panel">
+        <span class="stats-collapsible__title section-title section-title--sm">Клики по дням</span>
+        <span class="stats-collapsible__chevron" aria-hidden="true"></span>
+      </button>
+      <div id="clicks-chart-panel" class="stats-collapsible__body stats-collapsible__body--hidden">
+        <div id="clicks-chart-live-root">
+          {{ bar_chart(clicks_chart) }}
+        </div>
       </div>
     </div>
     <div class="indicators-panel">
@@ -339,6 +345,16 @@ document.addEventListener("DOMContentLoaded", function () {
       syncDatePanelUi();
     });
     syncDatePanelUi();
+  }
+
+  var clicksChartToggle = document.getElementById("clicks-chart-toggle");
+  var clicksChartPanel = document.getElementById("clicks-chart-panel");
+  if (clicksChartToggle && clicksChartPanel) {
+    clicksChartToggle.addEventListener("click", function () {
+      var open = clicksChartPanel.classList.toggle("stats-collapsible__body--hidden");
+      clicksChartToggle.setAttribute("aria-expanded", open ? "false" : "true");
+      clicksChartToggle.classList.toggle("stats-collapsible__toggle--open", !open);
+    });
   }
 
   window.setInterval(pollStats, POLL_MS);
