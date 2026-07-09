@@ -49,7 +49,22 @@ _OG_IMAGE_PATTERNS = (
     ),
 )
 
-_DOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$", re.I)
+_OG_IMAGE_SCAN_BYTES = 1_500_000
+
+_YOUTUBE_AVATAR_RE = re.compile(
+    r'"avatar"\s*:\s*\{\s*"thumbnails"\s*:\s*\[\s*\{\s*"url"\s*:\s*"([^"]+)"',
+    re.I,
+)
+
+_YOUTUBE_OG_IMAGE_RE = re.compile(
+    r'<meta[^>]+property=["\']og:image(?::url)?["\'][^>]+content=["\']([^"\']+)',
+    re.I,
+)
+
+_YOUTUBE_CHANNEL_URL_RE = re.compile(
+    r"^https?://(?:www\.)?youtube\.com/(?:@|channel/|c/|user/)",
+    re.I,
+)
 
 
 
@@ -121,6 +136,54 @@ def extract_tiktok_avatar_from_html(html: str) -> str | None:
         if pic:
             return pic
     return _find_tiktok_avatar_in_json_blob(chunk)
+
+
+def _normalize_youtube_profile_url(url: str) -> str | None:
+    raw = (url or "").strip()
+    if not raw:
+        return None
+    if not re.match(r"^https?://", raw, re.I):
+        return None
+    try:
+        parsed = urlparse(raw)
+    except Exception:
+        return None
+    host = (parsed.netloc or "").lower().removeprefix("www.")
+    if host not in ("youtube.com", "m.youtube.com", "youtu.be"):
+        return None
+    path = (parsed.path or "").strip("/")
+    if not path:
+        return None
+    if path.startswith("@"):
+        handle = path.split("/")[0]
+        return f"https://www.youtube.com/{handle}"
+    parts = path.split("/")
+    if parts[0] in ("channel", "c", "user") and len(parts) > 1:
+        return f"https://www.youtube.com/{parts[0]}/{parts[1].split('?')[0]}"
+    return f"https://www.youtube.com/@{parts[0].lstrip('@').split('?')[0]}"
+
+
+def extract_youtube_avatar_from_html(html: str) -> str | None:
+    """Аватар канала YouTube из og:image или JSON avatar.thumbnails."""
+    chunk = html[:_OG_IMAGE_SCAN_BYTES]
+    m = _YOUTUBE_OG_IMAGE_RE.search(chunk)
+    if m:
+        url = unescape(m.group(1).strip())
+        if is_safe_fetch_url(url):
+            return url
+    m = _YOUTUBE_AVATAR_RE.search(chunk)
+    if m:
+        url = _decode_embedded_cdn_url(m.group(1))
+        if is_safe_fetch_url(url):
+            return url
+    return None
+
+
+def _is_youtube_profile_url(url: str) -> bool:
+    return bool(_YOUTUBE_CHANNEL_URL_RE.match((url or "").strip()))
+
+
+_DOMAIN_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$", re.I)
 
 
 def _first_path_segment(path: str) -> str | None:
@@ -378,9 +441,26 @@ async def _fetch_og_image(client: httpx.AsyncClient, page_url: str) -> str | Non
         ct = (r.headers.get("content-type") or "").lower()
         if "html" not in ct and "text" not in ct:
             return None
-        return _extract_og_image(r.text[:500_000], str(r.url))
+        return _extract_og_image(r.text[:_OG_IMAGE_SCAN_BYTES], str(r.url))
     except Exception as exc:
         log.debug("og:image fetch failed for %s: %s", page_url, exc)
+        return None
+
+
+async def _try_youtube_avatar_html(client: httpx.AsyncClient, profile_url: str) -> str | None:
+    norm = _normalize_youtube_profile_url(profile_url)
+    if not norm or not is_safe_fetch_url(norm):
+        return None
+    try:
+        r = await safe_get(client, norm, timeout=15.0)
+        if r.status_code != 200:
+            return None
+        ct = (r.headers.get("content-type") or "").lower()
+        if "html" not in ct and "text" not in ct:
+            return None
+        return extract_youtube_avatar_from_html(r.text)
+    except Exception as exc:
+        log.debug("youtube avatar html failed for %s: %s", profile_url, exc)
         return None
 
 
@@ -444,6 +524,11 @@ async def resolve_account_avatar_url(
 
     profile_url = account_profile_url(label, platform)
     if profile_url:
+        plat = (platform or "").lower()
+        if plat == "youtube" or _is_youtube_profile_url(profile_url):
+            yt_pic = await _try_youtube_avatar_html(client, profile_url)
+            if yt_pic:
+                return yt_pic
         tiktok_pic = await _try_tiktok_avatar_html(client, profile_url)
         if tiktok_pic:
             return tiktok_pic
