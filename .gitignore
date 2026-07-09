@@ -28,4 +28,4 @@ scripts/show-*.sh
 scripts/social-*.sh
 scripts/test-*.sh
 scripts/verify-*.sh
-scripts/coolify-env-*.sh
+data/avatars/

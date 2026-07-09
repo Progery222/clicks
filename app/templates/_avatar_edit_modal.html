@@ -10,6 +10,18 @@
       <div id="avatar-modal-preview" class="avatar-modal__preview" aria-live="polite"></div>
       <p class="muted small avatar-modal__mode" id="avatar-modal-mode-label"></p>
     </div>
+    <div class="avatar-modal__custom stack">
+      <label class="field-label" for="avatar-modal-url">URL картинки
+        <input class="input" type="url" id="avatar-modal-url" name="avatar_url"
+          placeholder="https://example.com/photo.jpg" autocomplete="off">
+      </label>
+      <button type="button" class="btn btn-secondary" id="avatar-modal-url-apply">Применить URL</button>
+      <label class="field-label" for="avatar-modal-file">Загрузить файл
+        <input class="input" type="file" id="avatar-modal-file" name="avatar_file"
+          accept="image/jpeg,image/png,image/webp,image/gif">
+      </label>
+      <p class="muted small">JPEG, PNG, WebP или GIF, до 2 МБ</p>
+    </div>
     <div class="avatar-modal__actions stack">
       <button type="button" class="btn btn-primary" id="avatar-modal-scrape">Спарсить фото профиля</button>
       <button type="button" class="btn btn-secondary" id="avatar-modal-platform">Логотип платформы</button>

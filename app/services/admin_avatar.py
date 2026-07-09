@@ -29,6 +29,7 @@ from app.services.avatar_image_cache import (
     invalidate_link_avatar_cache,
     put_cached_avatar,
 )
+from app.services.avatar_upload import is_upload_avatar_url, read_link_avatar_upload
 from app.url_validation import is_safe_fetch_url
 
 log = logging.getLogger(__name__)
@@ -78,7 +79,8 @@ async def resolve_and_cache_link_avatar(db: AsyncSession, link: Link) -> str | N
 
     if link.account_avatar_url and not is_placeholder_avatar(link.account_avatar_url):
         if mode == AVATAR_MODE_PHOTO or mode == AVATAR_MODE_AUTO:
-            return link.account_avatar_url
+            if is_upload_avatar_url(link.account_avatar_url) or mode == AVATAR_MODE_PHOTO:
+                return link.account_avatar_url
 
     pic = await lookup_profile_pic(link.label, link.platform)
     if pic and not is_placeholder_avatar(pic):
@@ -144,6 +146,17 @@ async def stream_link_avatar(
     pic_url = await resolve_and_cache_link_avatar(db, link)
     if not pic_url:
         raise HTTPException(status_code=404, detail="avatar not found")
+
+    lid = str(link.id)
+
+    if is_upload_avatar_url(pic_url):
+        local = read_link_avatar_upload(link.id)
+        if local is None:
+            raise HTTPException(status_code=404, detail="upload not found")
+        content, ct = local
+        cached = put_cached_avatar(lid, pic_url, content, ct)
+        return _avatar_response(cached, request)
+
     if not is_safe_fetch_url(pic_url):
         raise HTTPException(status_code=404, detail="unsafe avatar URL")
 

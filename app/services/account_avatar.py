@@ -15,6 +15,7 @@ from app.models import Link
 from app.platforms import platform_favicon_url
 from app.safe_http import create_safe_http_client, safe_get
 from app.services.avatar_image_cache import invalidate_link_avatar_cache
+from app.services.avatar_upload import delete_link_avatar_upload, is_upload_avatar_url
 from app.url_validation import is_safe_fetch_url
 
 log = logging.getLogger(__name__)
@@ -234,10 +235,41 @@ async def scrape_link_avatar(db: AsyncSession, link: Link) -> str | None:
     async with create_safe_http_client(headers=_FETCH_HEADERS) as client:
         pic = await _fetch_photo_url(link.label, link.platform, client)
     if pic:
+        delete_link_avatar_upload(link.id)
         link.account_avatar_url = pic
         link.account_avatar_mode = AVATAR_MODE_PHOTO
         invalidate_link_avatar_cache(link.id)
     return pic
+
+
+async def set_custom_avatar_url(db: AsyncSession, link: Link, url: str) -> None:
+    """Задать аватар по прямой ссылке на изображение."""
+    raw = (url or "").strip()
+    if not raw:
+        raise ValueError("Укажите URL")
+    if not is_safe_fetch_url(raw):
+        raise ValueError("Недопустимый URL (нужен публичный http(s) на картинку)")
+    delete_link_avatar_upload(link.id)
+    link.account_avatar_url = raw
+    link.account_avatar_mode = AVATAR_MODE_PHOTO
+    invalidate_link_avatar_cache(link.id)
+
+
+async def set_uploaded_avatar(
+    db: AsyncSession,
+    link: Link,
+    content: bytes,
+    *,
+    declared_type: str | None = None,
+) -> None:
+    """Сохранить загруженный файл как аватар."""
+    from app.services.avatar_upload import save_link_avatar_upload, upload_marker, validate_avatar_upload
+
+    media_type = validate_avatar_upload(content, declared_type)
+    save_link_avatar_upload(link.id, content, media_type)
+    link.account_avatar_url = upload_marker(link.id)
+    link.account_avatar_mode = AVATAR_MODE_PHOTO
+    invalidate_link_avatar_cache(link.id)
 
 
 async def set_link_avatar_mode(db: AsyncSession, link: Link, mode: str) -> None:
@@ -247,6 +279,7 @@ async def set_link_avatar_mode(db: AsyncSession, link: Link, mode: str) -> None:
     invalidate_link_avatar_cache(link.id)
     if mode == AVATAR_MODE_LETTER:
         link.account_avatar_url = None
+        delete_link_avatar_upload(link.id)
     elif mode == AVATAR_MODE_PLATFORM:
         link.account_avatar_url = platform_logo_url_for_link(link)
     elif mode == AVATAR_MODE_AUTO:

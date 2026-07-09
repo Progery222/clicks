@@ -39,10 +39,13 @@ from app.services.account_avatar import (
     AVATAR_MODES,
     bootstrap_link_avatar,
     scrape_link_avatar,
+    set_custom_avatar_url,
     set_link_avatar_mode,
+    set_uploaded_avatar,
 )
 from app.services.admin_avatar import admin_avatar_href, stream_link_avatar
 from app.services.avatar_image_cache import invalidate_link_avatar_cache
+from app.services.avatar_upload import delete_link_avatar_upload, is_upload_avatar_url
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.security import verify_env_password
 from app.services.ip_lockout import (
@@ -230,6 +233,66 @@ async def link_avatar_state(
             "mode": link.account_avatar_mode or "auto",
             "avatar_url": admin_avatar_href(link),
             "label": link.label or link.slug,
+            "custom_url": (
+                link.account_avatar_url
+                if link.account_avatar_url
+                and not is_upload_avatar_url(link.account_avatar_url)
+                and str(link.account_avatar_url).startswith(("http://", "https://"))
+                else ""
+            ),
+        }
+    )
+
+
+@router.post("/links/{link_id}/avatar/url")
+async def link_avatar_set_url(
+    link_id: uuid.UUID,
+    request: Request,
+    url: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    _require_admin(request)
+    link = await db.get(Link, link_id)
+    if link is None:
+        raise HTTPException(404)
+    try:
+        await set_custom_avatar_url(db, link, url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await db.commit()
+    await db.refresh(link)
+    return JSONResponse(
+        {
+            "ok": True,
+            "mode": link.account_avatar_mode,
+            "avatar_url": admin_avatar_href(link),
+        }
+    )
+
+
+@router.post("/links/{link_id}/avatar/upload")
+async def link_avatar_upload(
+    link_id: uuid.UUID,
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    _require_admin(request)
+    link = await db.get(Link, link_id)
+    if link is None:
+        raise HTTPException(404)
+    content = await file.read()
+    try:
+        await set_uploaded_avatar(db, link, content, declared_type=file.content_type)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await db.commit()
+    await db.refresh(link)
+    return JSONResponse(
+        {
+            "ok": True,
+            "mode": link.account_avatar_mode,
+            "avatar_url": admin_avatar_href(link),
         }
     )
 
@@ -858,6 +921,7 @@ async def link_delete(
     if link is None:
         raise HTTPException(404)
     invalidate_link_avatar_cache(link_id)
+    delete_link_avatar_upload(link_id)
     await db.execute(delete(Link).where(Link.id == link_id))
     await db.commit()
     return RedirectResponse("/admin", status_code=302)
