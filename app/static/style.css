@@ -52,10 +52,12 @@
 
 html {
   scroll-behavior: smooth;
+  width: 100%;
 }
 
 body {
   margin: 0;
+  width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
   font-family: var(--font-sans);
@@ -106,9 +108,11 @@ a:hover {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
-  padding: 0.85rem 1.5rem;
-  padding-left: max(1.5rem, env(safe-area-inset-left));
-  padding-right: max(1.5rem, env(safe-area-inset-right));
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.85rem clamp(0.65rem, 3vw, 1.5rem);
+  padding-left: max(clamp(0.65rem, 3vw, 1.5rem), env(safe-area-inset-left));
+  padding-right: max(clamp(0.65rem, 3vw, 1.5rem), env(safe-area-inset-right));
   padding-top: max(0.85rem, env(safe-area-inset-top));
   border-bottom: 1px solid var(--border);
   background: var(--elevated);
@@ -276,11 +280,12 @@ a:hover {
 }
 
 .main {
-  max-width: min(var(--layout-max), calc(100vw - 2.5rem));
+  width: 100%;
+  max-width: var(--layout-max);
   margin: 0 auto;
-  padding: 1.75rem 1.25rem 3rem;
-  padding-left: max(1.25rem, env(safe-area-inset-left));
-  padding-right: max(1.25rem, env(safe-area-inset-right));
+  padding: clamp(0.85rem, 2.5vw, 1.75rem) clamp(0.5rem, 3vw, 1.25rem) 3rem;
+  padding-left: max(clamp(0.5rem, 3vw, 1.25rem), env(safe-area-inset-left));
+  padding-right: max(clamp(0.5rem, 3vw, 1.25rem), env(safe-area-inset-right));
   padding-bottom: max(3rem, env(safe-area-inset-bottom));
   min-width: 0;
 }
@@ -2294,9 +2299,9 @@ button[type="submit"].btn-primary {
 
   .main {
     width: 100%;
-    max-width: 100%;
-    padding: 0.85rem max(0.5rem, env(safe-area-inset-left)) 1.75rem
-      max(0.5rem, env(safe-area-inset-right));
+    max-width: none;
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+    padding-right: max(0.5rem, env(safe-area-inset-right));
     padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
   }
 

@@ -88,6 +88,7 @@ from app.stats_range import (
 )
 from app.utils.bulk_labels import MAX_BULK_LABELS, parse_label_lines
 from app.utils.csv_import import MAX_IMPORT_BYTES, MAX_IMPORT_ROWS, parse_links_import_csv
+from app.template_globals import register_template_globals
 from app.utils.slug import random_slug
 from app.url_validation import is_valid_destination_url
 
@@ -97,6 +98,7 @@ MAX_BULK_DEST_UPDATE = 500
 
 _templates_dir = str(Path(__file__).resolve().parent.parent / "templates")
 templates = Jinja2Templates(directory=_templates_dir)
+register_template_globals(templates.env)
 templates.env.globals["admin_filter_href"] = (
     lambda prof, plat: "/admin" + build_filter_query(prof, plat)
 )

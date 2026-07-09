@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
+from app.template_globals import register_template_globals
 from app.jobs import cleanup_old_clicks
 from app.middleware.csrf import CsrfMiddleware
 from app.middleware.ip_ban import IpAuthBanMiddleware
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+    register_template_globals(templates.env)
 
     @app.get("/privacy", response_class=HTMLResponse)
     async def privacy_page(request: Request):
