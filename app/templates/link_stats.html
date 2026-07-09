@@ -82,6 +82,15 @@
       <div id="countries-chart-live-root">
         {{ bar_chart(countries_chart, limit=3) }}
       </div>
+      {% if countries_missing_code %}
+      <p id="countries-geo-hint" class="muted small stats-geo-hint">
+        {% if not geoip_db_present %}
+        <strong>Сейчас на сервере не найден файл GeoIP</strong> (ни <code class="slug-inline">GeoLite2-City.mmdb</code>, ни <code class="slug-inline">dbip-country.mmdb</code>).
+        {% else %}
+        «—» в списке — код страны не был записан при клике (часто старые записи или приватный IP).
+        {% endif %}
+      </p>
+      {% endif %}
     </div>
     <div class="indicators-panel">
       <h2 class="section-title section-title--sm">Операционные системы</h2>
@@ -95,77 +104,6 @@
         {{ bar_chart(device_chart, limit=3) }}
       </div>
     </div>
-  </div>
-
-  <div class="stats-tops-grid">
-  <div>
-  <h2 class="section-title">Топ стран</h2>
-  <div id="countries-live-root">
-  {% if not countries %}
-  <p class="muted">Нет данных за период.</p>
-  {% else %}
-  {% if countries_missing_code %}
-  <p class="muted small">
-    {% if not geoip_db_present %}
-    <strong>Сейчас на сервере не найден файл GeoIP</strong> (ни <code class="slug-inline">GeoLite2-City.mmdb</code>, ни <code class="slug-inline">dbip-country.mmdb</code>) — проверьте логи при старте, сеть и переменные <code class="slug-inline">GEOIP_*</code>.
-    {% else %}
-    «—» в столбце страны значит, что <strong>в момент записи клика</strong> в базу не попал код страны (часто: база ещё не была на сервере, IP приватный, заход с <code class="slug-inline">localhost</code> без <code class="slug-inline">GEOIP_DEBUG_FALLBACK_IP</code>). Это не пересчитывается задним числом — сделайте новый тестовый переход по ссылке после появления MMDB на сервере.
-    {% endif %}
-  </p>
-  {% endif %}
-  <div class="table-wrap">
-    <table class="table">
-      <thead><tr><th>Страна</th><th class="num">Кликов</th></tr></thead>
-      <tbody>
-        {% for cc, n in countries %}
-        <tr><td>{{ cc or "—" }}</td><td class="num">{{ n }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-  </div>
-  </div>
-
-  <div>
-  <h2 class="section-title">Топ ОС</h2>
-  <div id="os-live-root">
-  {% if not os_rows %}
-  <p class="muted">Нет данных за период.</p>
-  {% else %}
-  <div class="table-wrap">
-    <table class="table">
-      <thead><tr><th>ОС</th><th class="num">Кликов</th></tr></thead>
-      <tbody>
-        {% for label, n in os_rows %}
-        <tr><td>{{ label }}</td><td class="num">{{ n }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-  </div>
-  </div>
-
-  <div>
-  <h2 class="section-title">Тип устройства</h2>
-  <div id="devices-live-root">
-  {% if not device_rows %}
-  <p class="muted">Нет данных за период.</p>
-  {% else %}
-  <div class="table-wrap">
-    <table class="table">
-      <thead><tr><th>Устройство</th><th class="num">Кликов</th></tr></thead>
-      <tbody>
-        {% for label, n in device_rows %}
-        <tr><td>{{ label }}</td><td class="num">{{ n }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-  </div>
-  </div>
   </div>
 
   <div class="stats-clear-panel stats-clear-panel--bottom">
@@ -189,9 +127,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var elTotal = document.getElementById("stat-live-total");
   var elUniq = document.getElementById("stat-live-uniques");
-  var countriesRoot = document.getElementById("countries-live-root");
-  var osRoot = document.getElementById("os-live-root");
-  var devicesRoot = document.getElementById("devices-live-root");
   var clicksChartRoot = document.getElementById("clicks-chart-live-root");
   var countriesChartRoot = document.getElementById("countries-chart-live-root");
   var osChartRoot = document.getElementById("os-chart-live-root");
@@ -275,49 +210,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function renderTopTable(root, rows, colLabel, keyField) {
-    if (!root) return;
-    var html = "";
-    if (!rows || !rows.length) {
-      html += "<p class=\"muted\">Нет данных за период.</p>";
-    } else {
-      html += "<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>" + esc(colLabel) + "</th><th class=\"num\">Кликов</th></tr></thead><tbody>";
-      rows.forEach(function (row) {
-        var label = row[keyField] ? row[keyField] : (row.code ? row.code : "—");
-        if (keyField === "code" && !row.code) label = "—";
-        html += "<tr><td>" + esc(String(label)) + "</td><td class=\"num\">" + esc(String(row.count)) + "</td></tr>";
-      });
-      html += "</tbody></table></div>";
-    }
-    root.innerHTML = html;
-  }
-
-  function renderCountries(data) {
-    if (!countriesRoot) return;
-    var html = "";
-    if (data.countries_missing_code) {
-      html += "<p class=\"muted small\">";
-      if (!data.geoip_db_present) {
-        html += "<strong>Сейчас на сервере не найден файл GeoIP</strong> (ни <code class=\"slug-inline\">GeoLite2-City.mmdb</code>, ни <code class=\"slug-inline\">dbip-country.mmdb</code>) — проверьте логи при старте, сеть и переменные <code class=\"slug-inline\">GEOIP_*</code>.";
-      } else {
-        html += "«—» в столбце страны значит, что <strong>в момент записи клика</strong> в базу не попал код страны (часто: база ещё не была на сервере, IP приватный, заход с <code class=\"slug-inline\">localhost</code> без <code class=\"slug-inline\">GEOIP_DEBUG_FALLBACK_IP</code>). Это не пересчитывается задним числом — сделайте новый тестовый переход по ссылке после появления MMDB на сервере.";
-      }
-      html += "</p>";
-    }
-    if (!data.countries || !data.countries.length) {
-      html += "<p class=\"muted\">Нет данных за период.</p>";
-    } else {
-      html += "<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Страна</th><th class=\"num\">Кликов</th></tr></thead><tbody>";
-      data.countries.forEach(function (row) {
-        var cc = row.code ? row.code : "—";
-        html += "<tr><td>" + esc(cc) + "</td><td class=\"num\">" + esc(String(row.count)) + "</td></tr>";
-      });
-      html += "</tbody></table></div>";
-    }
-    countriesRoot.innerHTML = html;
-  }
-
   var POLL_MS = 12000;
+
   function pollStats() {
     if (document.hidden) return;
     var r = readRange();
@@ -344,9 +238,8 @@ document.addEventListener("DOMContentLoaded", function () {
           renderBarChart(osChartRoot, data.charts.os, null, CHART_TOP_LIMIT);
           renderBarChart(devicesChartRoot, data.charts.devices, null, CHART_TOP_LIMIT);
         }
-        renderCountries(data);
-        renderTopTable(osRoot, data.os, "ОС", "label");
-        renderTopTable(devicesRoot, data.devices, "Устройство", "label");
+        var geoHint = document.getElementById("countries-geo-hint");
+        if (geoHint) geoHint.hidden = !data.countries_missing_code;
       })
       .catch(function () {});
   }

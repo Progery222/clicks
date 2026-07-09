@@ -2117,6 +2117,10 @@ button[type="submit"].btn-primary {
   padding-bottom: 1rem;
 }
 
+.stats-geo-hint {
+  margin: 0.75rem 0 0;
+}
+
 .stats-clear-hint {
   margin: 0.65rem 0 0;
   max-width: 52ch;
