@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Link
 from app.platforms import platform_favicon_url
+from app.services.avatar_image_cache import invalidate_link_avatar_cache
 
 log = logging.getLogger(__name__)
 
@@ -219,6 +220,7 @@ async def bootstrap_link_avatar(
             pic = None
 
     link.account_avatar_url = pic or platform_logo_url_for_link(link)
+    invalidate_link_avatar_cache(link.id)
 
 
 async def scrape_link_avatar(db: AsyncSession, link: Link) -> str | None:
@@ -230,6 +232,7 @@ async def scrape_link_avatar(db: AsyncSession, link: Link) -> str | None:
     if pic:
         link.account_avatar_url = pic
         link.account_avatar_mode = AVATAR_MODE_PHOTO
+        invalidate_link_avatar_cache(link.id)
     return pic
 
 
@@ -237,6 +240,7 @@ async def set_link_avatar_mode(db: AsyncSession, link: Link, mode: str) -> None:
     if mode not in AVATAR_MODES:
         raise ValueError(f"invalid avatar mode: {mode}")
     link.account_avatar_mode = mode
+    invalidate_link_avatar_cache(link.id)
     if mode == AVATAR_MODE_LETTER:
         link.account_avatar_url = None
     elif mode == AVATAR_MODE_PLATFORM:

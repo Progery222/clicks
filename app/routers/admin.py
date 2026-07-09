@@ -41,6 +41,7 @@ from app.services.account_avatar import (
     set_link_avatar_mode,
 )
 from app.services.admin_avatar import admin_avatar_href, stream_link_avatar
+from app.services.avatar_image_cache import invalidate_link_avatar_cache
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.security import verify_env_password
 from app.services.ip_lockout import (
@@ -206,7 +207,7 @@ async def link_avatar(
     link = await db.get(Link, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="link not found")
-    return await stream_link_avatar(db, link)
+    return await stream_link_avatar(db, link, request)
 
 
 @router.get("/links/{link_id}/avatar/state")
@@ -240,6 +241,7 @@ async def link_avatar_scrape(
         raise HTTPException(404)
     pic = await scrape_link_avatar(db, link)
     await db.commit()
+    await db.refresh(link)
     return JSONResponse(
         {
             "ok": bool(pic),
@@ -264,6 +266,7 @@ async def link_avatar_mode_post(
         raise HTTPException(404)
     await set_link_avatar_mode(db, link, mode)
     await db.commit()
+    await db.refresh(link)
     return JSONResponse(
         {
             "ok": True,

@@ -7,7 +7,7 @@ import logging
 import uuid
 
 import httpx
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,11 @@ from app.services.account_avatar import (
     resolve_account_avatar_url,
 )
 from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pic
+from app.services.avatar_image_cache import (
+    get_cached_avatar,
+    invalidate_link_avatar_cache,
+    put_cached_avatar,
+)
 
 log = logging.getLogger(__name__)
 
@@ -32,16 +37,24 @@ _IMG_HEADERS = {
     "Accept": "image/*,*/*;q=0.8",
 }
 
+_BROWSER_CACHE = "private, max-age=2592000, immutable"
+
 _resolve_locks: dict[uuid.UUID, asyncio.Lock] = {}
 _resolve_guard = asyncio.Lock()
 _http_resolve_sem = asyncio.Semaphore(6)
+
+
+def avatar_version(link: Link) -> int:
+    if link.updated_at:
+        return int(link.updated_at.timestamp())
+    return 0
 
 
 def admin_avatar_href(link: Link | uuid.UUID) -> str | None:
     if isinstance(link, Link):
         if not link_shows_avatar_image(link):
             return None
-        return f"/admin/avatar/{link.id}"
+        return f"/admin/avatar/{link.id}?v={avatar_version(link)}"
     return f"/admin/avatar/{link}"
 
 
@@ -69,6 +82,7 @@ async def resolve_and_cache_link_avatar(db: AsyncSession, link: Link) -> str | N
     pic = await lookup_profile_pic(link.label, link.platform)
     if pic and not is_placeholder_avatar(pic):
         link.account_avatar_url = pic
+        invalidate_link_avatar_cache(link.id)
         await db.commit()
         return pic
 
@@ -92,11 +106,13 @@ async def resolve_and_cache_link_avatar(db: AsyncSession, link: Link) -> str | N
 
             if pic and pic != link.account_avatar_url:
                 link.account_avatar_url = pic
+                invalidate_link_avatar_cache(link.id)
                 await db.commit()
             elif mode == AVATAR_MODE_AUTO:
                 fallback = platform_logo_url_for_link(link)
                 if fallback:
                     link.account_avatar_url = fallback
+                    invalidate_link_avatar_cache(link.id)
                     await db.commit()
                     return fallback
             return pic
@@ -104,10 +120,34 @@ async def resolve_and_cache_link_avatar(db: AsyncSession, link: Link) -> str | N
     return platform_logo_url_for_link(link)
 
 
-async def stream_link_avatar(db: AsyncSession, link: Link) -> Response:
+def _avatar_response(cached, request: Request | None) -> Response:
+    if request is not None:
+        inm = (request.headers.get("if-none-match") or "").strip()
+        if inm and inm.strip('"') == cached.etag:
+            return Response(status_code=304, headers={"ETag": f'"{cached.etag}"', "Cache-Control": _BROWSER_CACHE})
+    return Response(
+        content=cached.content,
+        media_type=cached.media_type,
+        headers={
+            "Cache-Control": _BROWSER_CACHE,
+            "ETag": f'"{cached.etag}"',
+        },
+    )
+
+
+async def stream_link_avatar(
+    db: AsyncSession,
+    link: Link,
+    request: Request | None = None,
+) -> Response:
     pic_url = await resolve_and_cache_link_avatar(db, link)
     if not pic_url:
         raise HTTPException(status_code=404, detail="avatar not found")
+
+    lid = str(link.id)
+    cached = get_cached_avatar(lid, pic_url)
+    if cached is not None:
+        return _avatar_response(cached, request)
 
     async with httpx.AsyncClient(
         headers=_IMG_HEADERS, follow_redirects=True, timeout=20.0
@@ -125,8 +165,5 @@ async def stream_link_avatar(db: AsyncSession, link: Link) -> Response:
     if not ct.startswith("image/"):
         raise HTTPException(status_code=404, detail="not an image")
 
-    return Response(
-        content=r.content,
-        media_type=ct,
-        headers={"Cache-Control": "private, max-age=604800"},
-    )
+    cached = put_cached_avatar(lid, pic_url, r.content, ct)
+    return _avatar_response(cached, request)

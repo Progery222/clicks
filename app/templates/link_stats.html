@@ -313,7 +313,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       preview.innerHTML =
         '<span class="account-avatar account-avatar--lg">' +
-        '<img class="account-avatar__img" src="' + avatarUrl + "?t=" + Date.now() +
+        '<img class="account-avatar__img" src="' + avatarUrl +
         '" alt="" referrerpolicy="no-referrer" onerror="this.hidden=true;this.parentElement.classList.add(\'account-avatar--letter\')">' +
         '<span class="account-avatar__letter">' + letter + "</span></span>";
     }
@@ -341,7 +341,7 @@ document.addEventListener("DOMContentLoaded", function () {
           inner.insertBefore(img, inner.firstChild);
         }
         img.hidden = false;
-        img.src = avatarUrl + "?t=" + Date.now();
+        img.src = avatarUrl;
         inner.classList.remove("account-avatar--letter");
       }
       var letterEl = inner.querySelector(".account-avatar__letter");
