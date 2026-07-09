@@ -80,19 +80,19 @@
     <div class="indicators-panel">
       <h2 class="section-title section-title--sm">Топ стран</h2>
       <div id="countries-chart-live-root">
-        {{ bar_chart(countries_chart) }}
+        {{ bar_chart(countries_chart, limit=3) }}
       </div>
     </div>
     <div class="indicators-panel">
       <h2 class="section-title section-title--sm">Операционные системы</h2>
       <div id="os-chart-live-root">
-        {{ bar_chart(os_chart) }}
+        {{ bar_chart(os_chart, limit=3) }}
       </div>
     </div>
     <div class="indicators-panel">
       <h2 class="section-title section-title--sm">Тип устройства</h2>
       <div id="devices-chart-live-root">
-        {{ bar_chart(device_chart) }}
+        {{ bar_chart(device_chart, limit=3) }}
       </div>
     </div>
   </div>
@@ -223,18 +223,25 @@ document.addEventListener("DOMContentLoaded", function () {
     return d.innerHTML;
   }
 
-  function renderBarChart(root, items, emptyMsg) {
+  var CHART_TOP_LIMIT = 3;
+
+  function renderBarChart(root, items, emptyMsg, limit) {
     if (!root) return;
     if (!items || !items.length) {
       root.innerHTML = "<p class=\"muted\">" + esc(emptyMsg || "Нет данных за период.") + "</p>";
       return;
     }
-    var html = "<div class=\"bar-chart\" role=\"img\">";
-    items.forEach(function (row) {
+    var prevWrap = root.querySelector(".bar-chart-wrap");
+    var expanded = prevWrap && prevWrap.dataset.expanded === "1";
+    var useLimit = typeof limit === "number" && limit > 0 ? limit : 0;
+    var html = "<div class=\"bar-chart-wrap\"" + (expanded ? " data-expanded=\"1\"" : "") + ">";
+    html += "<div class=\"bar-chart\" role=\"img\">";
+    items.forEach(function (row, idx) {
+      var extra = useLimit && idx >= useLimit ? " bar-chart__row--extra" : "";
       var style = "width:" + esc(String(row.pct)) + "%;";
       if (row.color) style += "--bar-color:" + row.color + ";";
       html +=
-        "<div class=\"bar-chart__row\">" +
+        "<div class=\"bar-chart__row" + extra + "\">" +
         "<span class=\"bar-chart__label\" title=\"" + esc(String(row.label)) + "\">" +
         esc(String(row.label)) + "</span>" +
         "<div class=\"bar-chart__track\"><div class=\"bar-chart__bar\" style=\"" + style + "\"></div></div>" +
@@ -242,7 +249,30 @@ document.addEventListener("DOMContentLoaded", function () {
         "</div>";
     });
     html += "</div>";
+    if (useLimit && items.length > useLimit) {
+      html +=
+        "<button type=\"button\" class=\"bar-chart__more js-bar-chart-more\">" +
+        (expanded ? "Свернуть" : "Смотреть все") +
+        "</button>";
+    }
+    html += "</div>";
     root.innerHTML = html;
+    if (expanded) {
+      var wrap = root.querySelector(".bar-chart-wrap");
+      if (wrap) wrap.classList.add("bar-chart-wrap--expanded");
+    }
+  }
+
+  if (section) {
+    section.addEventListener("click", function (e) {
+      var btn = e.target.closest(".js-bar-chart-more");
+      if (!btn) return;
+      var wrap = btn.closest(".bar-chart-wrap");
+      if (!wrap) return;
+      var expanded = wrap.classList.toggle("bar-chart-wrap--expanded");
+      wrap.dataset.expanded = expanded ? "1" : "0";
+      btn.textContent = expanded ? "Свернуть" : "Смотреть все";
+    });
   }
 
   function renderTopTable(root, rows, colLabel, keyField) {
@@ -310,9 +340,9 @@ document.addEventListener("DOMContentLoaded", function () {
         if (elUniq) elUniq.textContent = String(data.uniques);
         if (data.charts) {
           renderBarChart(clicksChartRoot, data.charts.clicks_by_day);
-          renderBarChart(countriesChartRoot, data.charts.countries);
-          renderBarChart(osChartRoot, data.charts.os);
-          renderBarChart(devicesChartRoot, data.charts.devices);
+          renderBarChart(countriesChartRoot, data.charts.countries, null, CHART_TOP_LIMIT);
+          renderBarChart(osChartRoot, data.charts.os, null, CHART_TOP_LIMIT);
+          renderBarChart(devicesChartRoot, data.charts.devices, null, CHART_TOP_LIMIT);
         }
         renderCountries(data);
         renderTopTable(osRoot, data.os, "ОС", "label");

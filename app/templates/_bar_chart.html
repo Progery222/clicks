@@ -1,17 +1,22 @@
-{% macro bar_chart(items, empty_msg='Нет данных за период.') %}
+{% macro bar_chart(items, empty_msg='Нет данных за период.', limit=none) %}
 {% if not items %}
 <p class="muted">{{ empty_msg }}</p>
 {% else %}
-<div class="bar-chart" role="img">
-  {% for row in items %}
-  <div class="bar-chart__row">
-    <span class="bar-chart__label" title="{{ row.label }}">{{ row.label }}</span>
-    <div class="bar-chart__track">
-      <div class="bar-chart__bar" style="width: {{ row.pct }}%;{% if row.color %} --bar-color: {{ row.color }};{% endif %}"></div>
+<div class="bar-chart-wrap" data-chart-limit="{{ limit if limit else '' }}">
+  <div class="bar-chart" role="img">
+    {% for row in items %}
+    <div class="bar-chart__row{% if limit and loop.index > limit %} bar-chart__row--extra{% endif %}">
+      <span class="bar-chart__label" title="{{ row.label }}">{{ row.label }}</span>
+      <div class="bar-chart__track">
+        <div class="bar-chart__bar" style="width: {{ row.pct }}%;{% if row.color %} --bar-color: {{ row.color }};{% endif %}"></div>
+      </div>
+      <span class="bar-chart__value">{{ row.count }}</span>
     </div>
-    <span class="bar-chart__value">{{ row.count }}</span>
+    {% endfor %}
   </div>
-  {% endfor %}
+  {% if limit and items|length > limit %}
+  <button type="button" class="bar-chart__more js-bar-chart-more">Смотреть все</button>
+  {% endif %}
 </div>
 {% endif %}
 {% endmacro %}

@@ -2489,6 +2489,39 @@ button[type="submit"].btn-primary {
   font-variant-numeric: tabular-nums;
 }
 
+.bar-chart-wrap .bar-chart__row--extra {
+  display: none;
+}
+
+.bar-chart-wrap--expanded .bar-chart__row--extra {
+  display: grid;
+}
+
+.bar-chart__more {
+  display: block;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.bar-chart__more:hover {
+  color: color-mix(in srgb, var(--accent) 80%, #fff);
+}
+
+.bar-chart__more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 @media (max-width: 768px) {
   .indicators-grid {
     grid-template-columns: 1fr;
