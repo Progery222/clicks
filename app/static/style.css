@@ -2300,19 +2300,22 @@ button[type="submit"].btn-primary {
   .main {
     width: 100%;
     max-width: none;
-    padding-left: max(0.5rem, env(safe-area-inset-left));
-    padding-right: max(0.5rem, env(safe-area-inset-right));
+    margin: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0.65rem;
     padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
   }
 
   .card:not(.card--flush) {
-    padding: 1.15rem 0.75rem;
+    padding: 1rem max(0.65rem, env(safe-area-inset-right)) 1.15rem
+      max(0.65rem, env(safe-area-inset-left));
   }
 
   .card.card--flush {
-    padding-left: 0;
-    padding-right: 0;
-    padding-top: 1rem;
+    padding-left: max(0.65rem, env(safe-area-inset-left));
+    padding-right: max(0.65rem, env(safe-area-inset-right));
+    padding-top: 0.85rem;
     padding-bottom: 0;
   }
 
