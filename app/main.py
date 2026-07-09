@@ -46,6 +46,20 @@ class NoCacheAdminHtmlMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class StaticAssetCacheMiddleware(BaseHTTPMiddleware):
+    """Версионированная статика — долгий кэш; без ?v= — не кэшировать (Cloudflare/браузер)."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if not request.url.path.startswith("/static/"):
+            return response
+        if request.query_params.get("v"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings = get_settings()
@@ -104,6 +118,7 @@ def create_app() -> FastAPI:
         openapi_url=None if settings.openapi_disabled() else "/openapi.json",
     )
     app.add_middleware(IpAuthBanMiddleware)
+    app.add_middleware(StaticAssetCacheMiddleware)
     app.add_middleware(NoCacheAdminHtmlMiddleware)
     app.add_middleware(CsrfMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
