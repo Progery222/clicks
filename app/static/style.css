@@ -2049,9 +2049,12 @@ button[type="submit"].btn-primary {
 
 .stats-charts-grid {
   margin-top: 1.25rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.stats-collapsible__toggle {
+.stats-charts-grid .indicators-panel--wide {
+  grid-column: 1 / -1;
+}
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2109,17 +2112,7 @@ button[type="submit"].btn-primary {
   padding-bottom: 1rem;
 }
 
-.stats-charts-grid .indicators-panel--wide {
-  grid-column: 1 / -1;
-}
-
-@media (min-width: 56rem) {
-  .stats-charts-grid .indicators-panel--wide {
-    grid-column: span 2;
-  }
-}
-
-.stats-clear-hint {
+.stats-collapsible__toggle {
   margin: 0.65rem 0 0;
   max-width: 52ch;
 }
@@ -2524,6 +2517,10 @@ button[type="submit"].btn-primary {
 
 @media (max-width: 768px) {
   .indicators-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-charts-grid {
     grid-template-columns: 1fr;
   }
 
