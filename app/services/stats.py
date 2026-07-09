@@ -231,6 +231,12 @@ def bar_chart_items(rows: list[tuple[str, int]], *, colors: dict[str, str] | Non
 
 async def dashboard_click_counts(session: AsyncSession) -> dict[uuid.UUID, tuple[int, int]]:
     """По каждой ссылке: (всего кликов, кликов за текущие сутки UTC)."""
+    from app.services.stats_cache import get_cached_dashboard_counts, set_cached_dashboard_counts
+
+    cached = get_cached_dashboard_counts()
+    if cached is not None:
+        return cached
+
     day_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = day_start + timedelta(days=1)
 
@@ -260,6 +266,7 @@ async def dashboard_click_counts(session: AsyncSession) -> dict[uuid.UUID, tuple
             out[lid] = (total, n)
         else:
             out[lid] = (0, n)
+    set_cached_dashboard_counts(out)
     return out
 
 

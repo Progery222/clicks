@@ -6,7 +6,17 @@ import ipaddress
 from urllib.parse import urlparse
 
 _MAX_URL_LEN = 2048
-_BLOCKED_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"})
+_BLOCKED_HOSTS = frozenset({
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "::1",
+    "[::1]",
+    "metadata",
+    "metadata.google.internal",
+    "169.254.169.254",
+})
+_MAX_FETCH_REDIRECTS = 5
 
 
 def is_valid_destination_url(url: str, *, allow_private_hosts: bool = False) -> bool:
@@ -39,6 +49,11 @@ def is_valid_destination_url(url: str, *, allow_private_hosts: bool = False) -> 
         except ValueError:
             pass
     return True
+
+
+def is_safe_fetch_url(url: str) -> bool:
+    """Публичный http(s) URL для исходящих запросов сервера (аватары, og:image)."""
+    return is_valid_destination_url(url, allow_private_hosts=False)
 
 
 def safe_redirect_location(url: str, *, allow_private_hosts: bool = False) -> str:

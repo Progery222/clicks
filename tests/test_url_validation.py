@@ -1,6 +1,6 @@
 """Тесты валидации целевых URL."""
 
-from app.url_validation import is_valid_destination_url, safe_redirect_location
+from app.url_validation import is_safe_fetch_url, is_valid_destination_url, safe_redirect_location
 
 
 def test_rejects_crlf_and_private_hosts():
@@ -11,6 +11,7 @@ def test_rejects_crlf_and_private_hosts():
 
 def test_accepts_public_https():
     assert is_valid_destination_url("https://example.com/path?q=1")
+    assert is_safe_fetch_url("https://example.com/photo.jpg")
     assert safe_redirect_location("https://example.com/x") == "https://example.com/x"
 
 

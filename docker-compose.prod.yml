@@ -29,7 +29,8 @@ services:
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
       API_TOKEN: ${API_TOKEN:-}
-      SESSION_COOKIE_HTTPS_ONLY: ${SESSION_COOKIE_HTTPS_ONLY:-false}
+      APP_ENV: ${APP_ENV:-production}
+      SESSION_COOKIE_HTTPS_ONLY: ${SESSION_COOKIE_HTTPS_ONLY:-true}
       GEOIP_COUNTRY_AUTO_DOWNLOAD: "false"
     depends_on:
       postgres:

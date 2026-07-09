@@ -1,12 +1,14 @@
 import asyncio
 import logging
 import uuid
+from datetime import UTC, date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Click
 from app.services.dedupe import dedupe_key_for_visitor
 from app.services.geoip import lookup_ip
+from app.services.stats_cache import invalidate_dashboard_counts_cache
 
 log = logging.getLogger(__name__)
 
@@ -19,9 +21,10 @@ async def insert_click(
     user_agent: str | None,
     referer: str | None,
     visitor_uuid: uuid.UUID,
+    dedupe_key: str | None = None,
 ) -> None:
     """Persist one click row. visitor_uuid — из cookie или новый (совпадает с Set-Cookie на первом заходе)."""
-    dedupe = dedupe_key_for_visitor(visitor_uuid)
+    dedupe = dedupe_key or dedupe_key_for_visitor(visitor_uuid)
     geo = await asyncio.to_thread(lookup_ip, ip)
     row = Click(
         link_id=link_id,
@@ -36,6 +39,7 @@ async def insert_click(
     )
     session.add(row)
     await session.commit()
+    invalidate_dashboard_counts_cache()
 
 
 async def log_click_background(

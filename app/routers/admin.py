@@ -69,6 +69,7 @@ from app.services.stats import (
     top_referers,
     top_user_agents,
 )
+from app.services.stats_cache import invalidate_dashboard_counts_cache
 from app.stats_range import (
     DASHBOARD_DEFAULT_PRESET,
     active_preset,
@@ -78,7 +79,7 @@ from app.stats_range import (
     stats_range,
 )
 from app.utils.bulk_labels import MAX_BULK_LABELS, parse_label_lines
-from app.utils.csv_import import MAX_IMPORT_ROWS, parse_links_import_csv
+from app.utils.csv_import import MAX_IMPORT_BYTES, MAX_IMPORT_ROWS, parse_links_import_csv
 from app.utils.slug import random_slug
 from app.url_validation import is_valid_destination_url
 
@@ -193,8 +194,8 @@ async def logout_post(request: Request) -> RedirectResponse:
 
 @router.get("/logout")
 async def logout_get(request: Request) -> RedirectResponse:
-    """Старые закладки GET /logout → форма выхода на /admin."""
-    return RedirectResponse("/admin", status_code=302)
+    request.session.clear()
+    return RedirectResponse("/admin/login", status_code=302)
 
 
 @router.get("/avatar/{link_id}")
@@ -491,10 +492,13 @@ async def profile_create(
     color: str = Form("#6366f1"),
 ):
     _require_admin(request)
+    n = (name or "").strip()
+    if not n:
+        raise HTTPException(status_code=400, detail="Имя профиля обязательно")
     c = (color or "#6366f1").strip()
     if not c.startswith("#") or len(c) > 7:
         c = "#6366f1"
-    db.add(Profile(name=name.strip(), color=c))
+    db.add(Profile(name=n, color=c))
     await db.commit()
     return RedirectResponse("/admin/profiles", status_code=302)
 
@@ -512,10 +516,13 @@ async def profile_edit(
     p = await db.get(Profile, profile_id)
     if p is None:
         raise HTTPException(404)
+    n = (name or "").strip()
+    if not n:
+        raise HTTPException(status_code=400, detail="Имя профиля обязательно")
     c = (color or "#6366f1").strip()
     if not c.startswith("#") or len(c) > 7:
         c = "#6366f1"
-    p.name = name.strip()
+    p.name = n
     p.color = c
     await db.commit()
     dest = (next or "/admin").strip()
@@ -734,7 +741,13 @@ async def link_import_csv(
     modal = (request.headers.get("x-modal-form") or "").strip() == "1"
     pid = parse_profile_id(profile_id)
     try:
-        raw = (await file.read()).decode("utf-8-sig")
+        raw_bytes = await file.read()
+        if len(raw_bytes) > MAX_IMPORT_BYTES:
+            msg = f"Файл слишком большой (максимум {MAX_IMPORT_BYTES // (1024 * 1024)} МБ)"
+            if modal:
+                return JSONResponse({"error": msg}, status_code=400)
+            raise HTTPException(status_code=400, detail=msg)
+        raw = raw_bytes.decode("utf-8-sig")
         rows = parse_links_import_csv(raw)
     except ValueError as e:
         msg = str(e)
@@ -842,6 +855,7 @@ async def link_delete(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
+    invalidate_link_avatar_cache(link_id)
     await db.execute(delete(Link).where(Link.id == link_id))
     await db.commit()
     return RedirectResponse("/admin", status_code=302)
@@ -886,6 +900,7 @@ async def clear_all_link_clicks(
     stmt = apply_click_link_filters(stmt, profile=profile, platform=platform, account=account)
     await db.execute(stmt)
     await db.commit()
+    invalidate_dashboard_counts_cache()
     return RedirectResponse(
         "/admin"
         + build_filter_query(
@@ -915,6 +930,7 @@ async def clear_link_clicks(
         raise HTTPException(404)
     await db.execute(delete(Click).where(Click.link_id == link_id))
     await db.commit()
+    invalidate_dashboard_counts_cache()
     return RedirectResponse(f"/admin/links/{link.id}/stats", status_code=302)
 
 

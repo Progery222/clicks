@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import secrets
 import uuid
@@ -28,6 +29,7 @@ from app.database import get_db
 from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_label
 from app.services.account_avatar import bootstrap_link_avatar
+from app.services.avatar_image_cache import invalidate_link_avatar_cache
 from app.services.links_meta import apply_link_label, apply_link_profile
 from app.url_validation import is_valid_destination_url
 from app.services.ip_lockout import clear_api_failures, client_ip, record_api_token_failure
@@ -39,10 +41,10 @@ from app.services.stats import (
     stats_summary,
     top_countries,
 )
-from app.stats_range import active_preset, form_period_dates, parse_range, stats_range
+from app.stats_range import DASHBOARD_DEFAULT_PRESET, active_preset, form_period_dates, parse_range, stats_range
 from app.services.label_match import normalize_account_label
 from app.utils.bulk_labels import MAX_BULK_LABELS, normalize_bulk_labels
-from app.utils.csv_import import parse_links_import_csv
+from app.utils.csv_import import MAX_IMPORT_BYTES, parse_links_import_csv
 from app.utils.slug import random_slug
 
 log = logging.getLogger(__name__)
@@ -51,9 +53,10 @@ router = APIRouter(prefix="/api/v1", tags=["api-v1"])
 
 
 def _safe_token_compare(a: str, b: str) -> bool:
-    if len(a) != len(b):
-        return False
-    return secrets.compare_digest(a, b)
+    return secrets.compare_digest(
+        hashlib.sha256(a.encode("utf-8")).digest(),
+        hashlib.sha256(b.encode("utf-8")).digest(),
+    )
 
 
 async def require_api_token(request: Request, db: AsyncSession = Depends(get_db)) -> None:
@@ -301,10 +304,13 @@ async def list_profiles(_: ApiTokenDep, db: DbDep) -> ProfilesListOut:
 
 @router.post("/profiles", response_model=ProfileOut, status_code=status.HTTP_201_CREATED)
 async def create_profile(_: ApiTokenDep, db: DbDep, body: ProfileCreate) -> ProfileOut:
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Profile name is required")
     c = (body.color or "#6366f1").strip()
     if not c.startswith("#"):
         c = "#6366f1"
-    p = Profile(name=body.name.strip(), color=c[:7])
+    p = Profile(name=name, color=c[:7])
     db.add(p)
     await db.commit()
     await db.refresh(p)
@@ -529,6 +535,8 @@ async def create_links_bulk(_: ApiTokenDep, db: DbDep, body: LinkBulkCreate) -> 
         apply_link_profile(link, pid)
         db.add(link)
         created_links.append(link)
+    for link in created_links:
+        await bootstrap_link_avatar(db, link, allow_http=False)
     await db.commit()
     for link in created_links:
         await db.refresh(link)
@@ -608,6 +616,7 @@ async def delete_link(link_id: uuid.UUID, _: ApiTokenDep, db: DbDep) -> Response
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Link not found")
+    invalidate_link_avatar_cache(link_id)
     await db.execute(delete(Link).where(Link.id == link_id))
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -625,8 +634,10 @@ async def link_stats(
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Link not found")
-    start, end = stats_range(link, date_from, date_to, preset)
-    active = active_preset(date_from, date_to, preset)
+    start, end = stats_range(
+        link, date_from, date_to, preset, default_preset=DASHBOARD_DEFAULT_PRESET
+    )
+    active = active_preset(date_from, date_to, preset, default=DASHBOARD_DEFAULT_PRESET)
     period_from, period_to = form_period_dates(start, end)
     total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
@@ -708,7 +719,13 @@ async def import_links_csv(
 ) -> dict[str, object]:
     pid = await _ensure_profile(db, profile_id)
     try:
-        raw = (await file.read()).decode("utf-8-sig")
+        raw_bytes = await file.read()
+        if len(raw_bytes) > MAX_IMPORT_BYTES:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=f"CSV file too large (max {MAX_IMPORT_BYTES} bytes)",
+            )
+        raw = raw_bytes.decode("utf-8-sig")
         rows = parse_links_import_csv(raw)
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -727,6 +744,8 @@ async def import_links_csv(
         apply_link_profile(link, pid)
         db.add(link)
         created_links.append(link)
+    for link in created_links:
+        await bootstrap_link_avatar(db, link, allow_http=False)
     await db.commit()
     for link in created_links:
         await db.refresh(link)

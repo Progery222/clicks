@@ -6,7 +6,6 @@ import asyncio
 import logging
 import uuid
 
-import httpx
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,11 +23,13 @@ from app.services.account_avatar import (
     resolve_account_avatar_url,
 )
 from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pic
+from app.safe_http import create_safe_http_client, safe_get
 from app.services.avatar_image_cache import (
     get_cached_avatar,
     invalidate_link_avatar_cache,
     put_cached_avatar,
 )
+from app.url_validation import is_safe_fetch_url
 
 log = logging.getLogger(__name__)
 
@@ -143,17 +144,19 @@ async def stream_link_avatar(
     pic_url = await resolve_and_cache_link_avatar(db, link)
     if not pic_url:
         raise HTTPException(status_code=404, detail="avatar not found")
+    if not is_safe_fetch_url(pic_url):
+        raise HTTPException(status_code=404, detail="unsafe avatar URL")
 
     lid = str(link.id)
     cached = get_cached_avatar(lid, pic_url)
     if cached is not None:
         return _avatar_response(cached, request)
 
-    async with httpx.AsyncClient(
-        headers=_IMG_HEADERS, follow_redirects=True, timeout=20.0
-    ) as client:
+    async with create_safe_http_client(headers=_IMG_HEADERS, timeout=20.0) as client:
         try:
-            r = await client.get(pic_url)
+            r = await safe_get(client, pic_url)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="unsafe avatar URL")
         except Exception as exc:
             log.warning("avatar proxy fetch failed %s: %s", pic_url[:80], exc)
             raise HTTPException(status_code=502, detail="fetch failed") from exc

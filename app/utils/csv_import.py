@@ -14,6 +14,7 @@ class ImportLinkRow:
 
 
 MAX_IMPORT_ROWS = 500
+MAX_IMPORT_BYTES = 2 * 1024 * 1024
 
 
 def _norm_header(h: str) -> str:

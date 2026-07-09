@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Link
 from app.platforms import platform_favicon_url
+from app.safe_http import create_safe_http_client, safe_get
 from app.services.avatar_image_cache import invalidate_link_avatar_cache
+from app.url_validation import is_safe_fetch_url
 
 log = logging.getLogger(__name__)
 
@@ -100,7 +102,7 @@ def account_profile_url(label: str | None, platform: str | None) -> str | None:
             return f"https://www.facebook.com/profile.php?id={user}"
         return f"https://www.facebook.com/{user}"
     if plat == "reddit":
-        return f"https://www.reddit.com/r/{user}/"
+        return f"https://www.reddit.com/user/{user}/"
     if plat == "rumble":
         return f"https://rumble.com/c/{user}"
 
@@ -131,7 +133,9 @@ def _extract_og_image(html: str, base_url: str) -> str | None:
         if m:
             raw = m.group(1).strip()
             if raw:
-                return unescape(urljoin(base_url, raw))
+                url = unescape(urljoin(base_url, raw))
+                if is_safe_fetch_url(url):
+                    return url
     return None
 
 
@@ -210,7 +214,7 @@ async def bootstrap_link_avatar(
 
     pic: str | None = None
     if allow_http:
-        async with httpx.AsyncClient(headers=_FETCH_HEADERS, follow_redirects=True) as client:
+        async with create_safe_http_client(headers=_FETCH_HEADERS) as client:
             pic = await _fetch_photo_url(link.label, link.platform, client)
     else:
         from app.services.accountstats_avatar import is_placeholder_avatar, lookup_profile_pic
@@ -227,7 +231,7 @@ async def scrape_link_avatar(db: AsyncSession, link: Link) -> str | None:
     """Принудительно спарсить фото профиля (как в accountstats)."""
     if not link.label or not str(link.label).strip():
         return None
-    async with httpx.AsyncClient(headers=_FETCH_HEADERS, follow_redirects=True) as client:
+    async with create_safe_http_client(headers=_FETCH_HEADERS) as client:
         pic = await _fetch_photo_url(link.label, link.platform, client)
     if pic:
         link.account_avatar_url = pic
@@ -250,8 +254,10 @@ async def set_link_avatar_mode(db: AsyncSession, link: Link, mode: str) -> None:
 
 
 async def _url_is_image(client: httpx.AsyncClient, url: str) -> bool:
+    if not is_safe_fetch_url(url):
+        return False
     try:
-        r = await client.head(url, follow_redirects=True, timeout=8.0)
+        r = await client.head(url, timeout=8.0)
         if r.status_code != 200:
             return False
         ct = (r.headers.get("content-type") or "").lower()
@@ -269,8 +275,10 @@ async def _try_telegram_userpic(client: httpx.AsyncClient, username: str) -> str
 
 
 async def _fetch_og_image(client: httpx.AsyncClient, page_url: str) -> str | None:
+    if not is_safe_fetch_url(page_url):
+        return None
     try:
-        r = await client.get(page_url, follow_redirects=True, timeout=12.0)
+        r = await safe_get(client, page_url, timeout=12.0)
         if r.status_code != 200:
             return None
         ct = (r.headers.get("content-type") or "").lower()
@@ -286,7 +294,8 @@ async def _try_tiktok_oembed(client: httpx.AsyncClient, profile_url: str) -> str
     if "tiktok.com" not in profile_url.lower():
         return None
     try:
-        r = await client.get(
+        r = await safe_get(
+            client,
             "https://www.tiktok.com/oembed",
             params={"url": profile_url},
             timeout=10.0,
@@ -302,10 +311,10 @@ async def _try_tiktok_oembed(client: httpx.AsyncClient, profile_url: str) -> str
 
 
 async def _try_tiktok_avatar_html(client: httpx.AsyncClient, profile_url: str) -> str | None:
-    if "tiktok.com" not in profile_url.lower():
+    if "tiktok.com" not in profile_url.lower() or not is_safe_fetch_url(profile_url):
         return None
     try:
-        r = await client.get(profile_url, timeout=15.0)
+        r = await safe_get(client, profile_url, timeout=15.0)
         if r.status_code != 200:
             return None
         m = _TIKTOK_AVATAR_RE.search(r.text[:900_000])
@@ -453,7 +462,7 @@ async def backfill_link_avatars(
             await db.commit()
         return updated
 
-    async with httpx.AsyncClient(headers=_FETCH_HEADERS, follow_redirects=True) as client:
+    async with create_safe_http_client(headers=_FETCH_HEADERS) as client:
         for link in todo:
             if link.account_avatar_url and not is_placeholder_avatar(link.account_avatar_url):
                 continue

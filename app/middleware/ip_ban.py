@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.database import AsyncSessionLocal
-from app.services.ip_lockout import MSG_BAN_JSON, is_ip_banned_now, client_ip, retry_after_seconds
+from app.services.ip_lockout import MSG_BAN_JSON, is_api_ip_blocked, is_ip_banned_now, client_ip, retry_after_seconds
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +23,16 @@ class IpAuthBanMiddleware(BaseHTTPMiddleware):
         ip = client_ip(request)
         try:
             async with AsyncSessionLocal() as session:
+                if path.startswith("/api/v1"):
+                    api_blocked = await is_api_ip_blocked(session, ip)
+                    if api_blocked:
+                        return JSONResponse(
+                            status_code=429,
+                            content={"detail": MSG_BAN_JSON},
+                            headers={"Retry-After": "3600"},
+                        )
+                    return await call_next(request)
+
                 banned, until = await is_ip_banned_now(session, ip)
         except Exception:
             log.exception("IpAuthBanMiddleware: DB error, пропуск проверки ban для ip=%s", ip)
@@ -33,13 +43,6 @@ class IpAuthBanMiddleware(BaseHTTPMiddleware):
 
         assert until is not None
         ra = str(retry_after_seconds(until))
-
-        if path.startswith("/api/v1"):
-            return JSONResponse(
-                status_code=429,
-                content={"detail": MSG_BAN_JSON},
-                headers={"Retry-After": ra},
-            )
 
         if path.startswith("/admin/api/"):
             return JSONResponse(

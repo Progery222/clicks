@@ -1,5 +1,5 @@
-import asyncio
 import uuid
+from datetime import UTC, date
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
@@ -11,8 +11,8 @@ from app.database import get_db
 from app.models import Link
 from app.request_utils import get_client_ip
 from app.services.redirect_rate_limit import allow_redirect
-from app.services.clicks import log_click_background
-from app.services.dedupe import parse_vid_cookie
+from app.services.clicks import insert_click
+from app.services.dedupe import dedupe_key_for_visitor, fingerprint_fallback, parse_vid_cookie
 from app.url_validation import safe_redirect_location
 
 router = APIRouter(tags=["redirect"])
@@ -47,18 +47,20 @@ async def redirect_slug(
     set_cookie_val: str | None = None
     if incoming:
         visitor_uuid = incoming
+        dedupe_key = dedupe_key_for_visitor(visitor_uuid)
     else:
         visitor_uuid = uuid.uuid4()
         set_cookie_val = str(visitor_uuid)
+        dedupe_key = fingerprint_fallback(ip, ua, date.today())
 
-    asyncio.create_task(
-        log_click_background(
-            link_id=link.id,
-            ip=ip,
-            user_agent=ua,
-            referer=ref,
-            visitor_uuid=visitor_uuid,
-        )
+    await insert_click(
+        db,
+        link_id=link.id,
+        ip=ip,
+        user_agent=ua,
+        referer=ref,
+        visitor_uuid=visitor_uuid,
+        dedupe_key=dedupe_key,
     )
 
     secure = request.url.scheme == "https"

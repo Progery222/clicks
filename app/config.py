@@ -53,6 +53,8 @@ class Settings(BaseSettings):
 
     # production | development — влияет на openapi и проверку секретов
     app_env: str = "development"
+    # None = доверять X-Forwarded-For только если peer не глобальный (docker/LAN)
+    trust_forwarded_headers: bool | None = None
     csrf_enabled: bool = True
     security_headers_enabled: bool = True
     disable_openapi_docs: bool | None = None

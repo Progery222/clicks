@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from functools import lru_cache
 from urllib.parse import urlparse
 
@@ -97,6 +98,24 @@ def _label_norm_keys(label: str, platform: str | None) -> list[str]:
     return list(dict.fromkeys(keys))
 
 
+_ACCOUNTSTATS_INDEX_TTL_SEC = 300.0
+_accountstats_index_cache: tuple[float, tuple[dict[str, str], dict[tuple[str, str], str], list[tuple[str, str, str]]]] | None = None
+
+
+async def _get_accountstats_index(
+    conn,
+) -> tuple[dict[str, str], dict[tuple[str, str], str], list[tuple[str, str, str]]]:
+    global _accountstats_index_cache
+    now = time.monotonic()
+    if _accountstats_index_cache is not None:
+        ts, data = _accountstats_index_cache
+        if now - ts < _ACCOUNTSTATS_INDEX_TTL_SEC:
+            return data
+    data = await _load_accountstats_index(conn)
+    _accountstats_index_cache = (now, data)
+    return data
+
+
 async def _load_accountstats_index(
     conn,
 ) -> tuple[dict[str, str], dict[tuple[str, str], str], list[tuple[str, str, str]]]:
@@ -140,7 +159,7 @@ def _fuzzy_match(
     for row_plat, row_user, pic in fuzzy_rows:
         if row_plat != plat:
             continue
-        if row_user == user_cf or user_cf in row_user or row_user in user_cf:
+        if row_user == user_cf:
             return pic
     return None
 
@@ -157,7 +176,7 @@ async def lookup_profile_pic(label: str | None, platform: str | None) -> str | N
 
     try:
         async with engine.connect() as conn:
-            by_url, by_user, fuzzy = await _load_accountstats_index(conn)
+            by_url, by_user, fuzzy = await _get_accountstats_index(conn)
             for nk in norm_keys:
                 if nk in by_url:
                     return by_url[nk]
@@ -186,7 +205,7 @@ async def lookup_profile_pics_batch(
     out: dict[str, str] = {}
     try:
         async with engine.connect() as conn:
-            by_url, by_user, fuzzy = await _load_accountstats_index(conn)
+            by_url, by_user, fuzzy = await _get_accountstats_index(conn)
             for label, platform in items:
                 if not label or not str(label).strip():
                     continue

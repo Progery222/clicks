@@ -84,22 +84,25 @@ async def record_admin_password_failure(db: AsyncSession, ip: str) -> bool:
     return banned
 
 
+async def is_api_ip_blocked(db: AsyncSession, ip: str) -> bool:
+    """Блок API после MAX_FAILURES неверных токенов (не влияет на /admin)."""
+    row = await _get_row(db, ip)
+    return row is not None and row.api_failures >= MAX_FAILURES
+
+
 async def record_api_token_failure(db: AsyncSession, ip: str) -> bool:
-    """Неверный/отсутствующий токен при настроенном API. True если IP забанен."""
-    now = datetime.now(UTC)
+    """Неверный/отсутствующий токен при настроенном API. True если достигнут лимит."""
     row = await _get_row(db, ip)
     if row is None:
         row = IpAuthLockout(ip=ip, admin_failures=0, api_failures=1)
         db.add(row)
     else:
         row.api_failures += 1
-    banned = False
-    if row.api_failures >= MAX_FAILURES:
-        row.banned_until = now + BAN_DURATION
-        banned = True
-        log.warning("ip_auth_lockout: api ban ip=%s until=%s", ip, row.banned_until)
+    blocked = row.api_failures >= MAX_FAILURES
+    if blocked:
+        log.warning("ip_auth_lockout: api failures limit ip=%s count=%s", ip, row.api_failures)
     await db.commit()
-    return banned
+    return blocked
 
 
 async def clear_admin_failures(db: AsyncSession, ip: str) -> None:
