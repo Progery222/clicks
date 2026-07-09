@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_bar_chart.html" import bar_chart %}
 {% block title %}{{ link.slug }} — статистика{% endblock %}
 {% block content %}
 <section class="card" data-stats-link-id="{{ link.id }}" data-active-preset="{{ active_preset }}">
@@ -63,14 +64,31 @@
     </div>
   </div>
 
-  <div class="stats-clear-panel">
-    <form method="post" action="/admin/links/{{ link.id }}/clicks/clear" class="inline"
-          data-confirm-title="Очистить статистику кликов?"
-          data-confirm-message="Будут удалены все записи кликов по этой ссылке: счётчики и топ стран. Сама короткая ссылка и целевой URL останутся. Восстановить записи будет нельзя."
-          data-confirm-ok="Очистить">
-      <button type="submit" class="btn btn-danger">Очистить статистику кликов</button>
-    </form>
-    <p class="muted small stats-clear-hint">Безвозвратно удаляются все сохранённые клики по этой ссылке (IP, гео, cookie‑идентификатор посетителя в рамках записи).</p>
+  <div class="indicators-grid stats-charts-grid">
+    <div class="indicators-panel indicators-panel--wide">
+      <h2 class="section-title section-title--sm">Клики по дням</h2>
+      <div id="clicks-chart-live-root">
+        {{ bar_chart(clicks_chart) }}
+      </div>
+    </div>
+    <div class="indicators-panel">
+      <h2 class="section-title section-title--sm">Топ стран</h2>
+      <div id="countries-chart-live-root">
+        {{ bar_chart(countries_chart) }}
+      </div>
+    </div>
+    <div class="indicators-panel">
+      <h2 class="section-title section-title--sm">Операционные системы</h2>
+      <div id="os-chart-live-root">
+        {{ bar_chart(os_chart) }}
+      </div>
+    </div>
+    <div class="indicators-panel">
+      <h2 class="section-title section-title--sm">Тип устройства</h2>
+      <div id="devices-chart-live-root">
+        {{ bar_chart(device_chart) }}
+      </div>
+    </div>
   </div>
 
   <div class="stats-tops-grid">
@@ -144,6 +162,16 @@
   </div>
   </div>
 
+  <div class="stats-clear-panel stats-clear-panel--bottom">
+    <form method="post" action="/admin/links/{{ link.id }}/clicks/clear" class="inline"
+          data-confirm-title="Очистить статистику кликов?"
+          data-confirm-message="Будут удалены все записи кликов по этой ссылке: счётчики и топ стран. Сама короткая ссылка и целевой URL останутся. Восстановить записи будет нельзя."
+          data-confirm-ok="Очистить">
+      <button type="submit" class="btn btn-danger">Очистить статистику кликов</button>
+    </form>
+    <p class="muted small stats-clear-hint">Безвозвратно удаляются все сохранённые клики по этой ссылке (IP, гео, cookie‑идентификатор посетителя в рамках записи).</p>
+  </div>
+
 </section>
 {% include "_avatar_edit_modal.html" %}
 <script>
@@ -158,6 +186,10 @@ document.addEventListener("DOMContentLoaded", function () {
   var countriesRoot = document.getElementById("countries-live-root");
   var osRoot = document.getElementById("os-live-root");
   var devicesRoot = document.getElementById("devices-live-root");
+  var clicksChartRoot = document.getElementById("clicks-chart-live-root");
+  var countriesChartRoot = document.getElementById("countries-chart-live-root");
+  var osChartRoot = document.getElementById("os-chart-live-root");
+  var devicesChartRoot = document.getElementById("devices-chart-live-root");
   var filterForm = document.querySelector(".filter-bar");
   var presetBtn = document.getElementById("stats-preset-cycle");
   var dateToggle = document.getElementById("stats-toggle-dates");
@@ -183,6 +215,28 @@ document.addEventListener("DOMContentLoaded", function () {
     var d = document.createElement("div");
     d.textContent = String(s);
     return d.innerHTML;
+  }
+
+  function renderBarChart(root, items, emptyMsg) {
+    if (!root) return;
+    if (!items || !items.length) {
+      root.innerHTML = "<p class=\"muted\">" + esc(emptyMsg || "Нет данных за период.") + "</p>";
+      return;
+    }
+    var html = "<div class=\"bar-chart\" role=\"img\">";
+    items.forEach(function (row) {
+      var style = "width:" + esc(String(row.pct)) + "%;";
+      if (row.color) style += "--bar-color:" + row.color + ";";
+      html +=
+        "<div class=\"bar-chart__row\">" +
+        "<span class=\"bar-chart__label\" title=\"" + esc(String(row.label)) + "\">" +
+        esc(String(row.label)) + "</span>" +
+        "<div class=\"bar-chart__track\"><div class=\"bar-chart__bar\" style=\"" + style + "\"></div></div>" +
+        "<span class=\"bar-chart__value\">" + esc(String(row.count)) + "</span>" +
+        "</div>";
+    });
+    html += "</div>";
+    root.innerHTML = html;
   }
 
   function renderTopTable(root, rows, colLabel, keyField) {
@@ -248,6 +302,12 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(function (data) {
         if (elTotal) elTotal.textContent = String(data.total);
         if (elUniq) elUniq.textContent = String(data.uniques);
+        if (data.charts) {
+          renderBarChart(clicksChartRoot, data.charts.clicks_by_day);
+          renderBarChart(countriesChartRoot, data.charts.countries);
+          renderBarChart(osChartRoot, data.charts.os);
+          renderBarChart(devicesChartRoot, data.charts.devices);
+        }
         renderCountries(data);
         renderTopTable(osRoot, data.os, "ОС", "label");
         renderTopTable(devicesRoot, data.devices, "Устройство", "label");

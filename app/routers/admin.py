@@ -64,6 +64,7 @@ from app.services.stats import (
     dashboard_click_counts,
     platform_click_stats,
     profile_click_stats,
+    stats_by_day,
     stats_summary,
     top_countries,
     top_device_types,
@@ -1021,6 +1022,7 @@ async def link_stats_data(
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
     os_rows = await top_os(session=db, link_id=link.id, start=start, end=end)
     device_rows = await top_device_types(session=db, link_id=link.id, start=start, end=end)
+    day_rows = await stats_by_day(session=db, link_id=link.id, start=start, end=end)
     geoip_db_present = (
         resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
     )
@@ -1032,6 +1034,14 @@ async def link_stats_data(
             "countries": [{"code": c or "", "count": n} for c, n in countries],
             "os": [{"label": label, "count": n} for label, n in os_rows],
             "devices": [{"label": label, "count": n} for label, n in device_rows],
+            "charts": {
+                "clicks_by_day": bar_chart_items(
+                    [(d["day"], d["clicks"]) for d in day_rows]
+                ),
+                "countries": bar_chart_items([(c or "—", n) for c, n in countries]),
+                "os": bar_chart_items(os_rows),
+                "devices": bar_chart_items(device_rows),
+            },
             "countries_missing_code": countries_missing_code,
             "geoip_db_present": geoip_db_present,
         }
@@ -1063,6 +1073,11 @@ async def link_stats(
     countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
     os_rows = await top_os(session=db, link_id=link.id, start=start, end=end)
     device_rows = await top_device_types(session=db, link_id=link.id, start=start, end=end)
+    day_rows = await stats_by_day(session=db, link_id=link.id, start=start, end=end)
+    clicks_chart = bar_chart_items([(d["day"], d["clicks"]) for d in day_rows])
+    countries_chart = bar_chart_items([(c or "—", n) for c, n in countries])
+    os_chart = bar_chart_items(os_rows)
+    device_chart = bar_chart_items(device_rows)
 
     geoip_db_present = (
         resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
@@ -1080,6 +1095,10 @@ async def link_stats(
             "countries": countries,
             "os_rows": os_rows,
             "device_rows": device_rows,
+            "clicks_chart": clicks_chart,
+            "countries_chart": countries_chart,
+            "os_chart": os_chart,
+            "device_chart": device_chart,
             "period_from": period_from,
             "period_to": period_to,
             "active_preset": active,

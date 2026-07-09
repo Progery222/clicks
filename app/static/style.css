@@ -2042,6 +2042,25 @@ button[type="submit"].btn-primary {
   background: rgba(251, 113, 133, 0.06);
 }
 
+.stats-clear-panel--bottom {
+  margin-top: 2rem;
+  margin-bottom: 0;
+}
+
+.stats-charts-grid {
+  margin-top: 1.25rem;
+}
+
+.stats-charts-grid .indicators-panel--wide {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 56rem) {
+  .stats-charts-grid .indicators-panel--wide {
+    grid-column: span 2;
+  }
+}
+
 .stats-clear-hint {
   margin: 0.65rem 0 0;
   max-width: 52ch;
