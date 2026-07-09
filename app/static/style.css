@@ -258,6 +258,21 @@ a:hover {
   background: var(--danger-bg);
 }
 
+.nav-logout-form {
+  display: inline;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-link--btn {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.35rem;
+}
+
 .main {
   max-width: 1280px;
   margin: 0 auto;

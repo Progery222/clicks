@@ -13,6 +13,7 @@ from app.request_utils import get_client_ip
 from app.services.redirect_rate_limit import allow_redirect
 from app.services.clicks import log_click_background
 from app.services.dedupe import parse_vid_cookie
+from app.url_validation import safe_redirect_location
 
 router = APIRouter(tags=["redirect"])
 
@@ -61,7 +62,14 @@ async def redirect_slug(
     )
 
     secure = request.url.scheme == "https"
-    out = Response(status_code=302, headers={"Location": link.destination_url})
+    try:
+        location = safe_redirect_location(
+            link.destination_url,
+            allow_private_hosts=settings.allow_private_destination_urls,
+        )
+    except ValueError:
+        raise HTTPException(status_code=500, detail="Invalid destination URL")
+    out = Response(status_code=302, headers={"Location": location})
     if set_cookie_val is not None:
         out.set_cookie(
             key=VID_COOKIE,

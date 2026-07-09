@@ -29,6 +29,7 @@ from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_label
 from app.services.account_avatar import bootstrap_link_avatar
 from app.services.links_meta import apply_link_label, apply_link_profile
+from app.url_validation import is_valid_destination_url
 from app.services.ip_lockout import clear_api_failures, client_ip, record_api_token_failure
 from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_path
 from app.services.stats import (
@@ -85,8 +86,11 @@ DbDep = Annotated[AsyncSession, Depends(get_db)]
 
 
 def _valid_url(url: str) -> bool:
-    u = url.strip()
-    return u.startswith("http://") or u.startswith("https://")
+    settings = get_settings()
+    return is_valid_destination_url(
+        url,
+        allow_private_hosts=settings.allow_private_destination_urls,
+    )
 
 
 async def _unique_slug(db: AsyncSession) -> str:

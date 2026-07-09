@@ -370,10 +370,10 @@ document.addEventListener("DOMContentLoaded", function () {
     function postAvatarAction(url, body) {
       setStatus("Подождите…");
       var opts = { method: "POST", credentials: "same-origin" };
-      if (body) {
-        opts.headers = { "Content-Type": "application/x-www-form-urlencoded" };
-        opts.body = body;
-      }
+      opts.headers = window.csrfHeaders
+        ? window.csrfHeaders({ "Content-Type": "application/x-www-form-urlencoded" })
+        : { "Content-Type": "application/x-www-form-urlencoded" };
+      opts.body = body;
       return fetch(url, opts)
         .then(function (r) {
           return r.json().then(function (data) {

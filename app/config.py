@@ -49,6 +49,35 @@ class Settings(BaseSettings):
     # БД accountstats / social-dashboard (accounts.profile_pic), опционально
     accountstats_database_url: str | None = None
 
+    # production | development — влияет на openapi и проверку секретов
+    app_env: str = "development"
+    csrf_enabled: bool = True
+    security_headers_enabled: bool = True
+    disable_openapi_docs: bool | None = None
+    allow_private_destination_urls: bool = False
+    content_security_policy: str = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+
+    def openapi_disabled(self) -> bool:
+        if self.disable_openapi_docs is not None:
+            return self.disable_openapi_docs
+        return self.app_env.strip().lower() == "production"
+
+    def validate_security(self) -> None:
+        if self.app_env.strip().lower() != "production":
+            return
+        if self.secret_key.strip() in ("", "change-me-in-production"):
+            raise RuntimeError("SECRET_KEY must be set in production (APP_ENV=production)")
+        if self.admin_password.strip() in ("", "admin"):
+            raise RuntimeError("ADMIN_PASSWORD must be changed in production")
+
 
 @lru_cache
 def get_settings() -> Settings:

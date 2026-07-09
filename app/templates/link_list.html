@@ -642,7 +642,7 @@
       fetch(form.action, {
         method: "POST",
         body: fd,
-        headers: { "X-Modal-Form": "1", "Accept": "application/json" },
+        headers: window.csrfHeaders ? window.csrfHeaders({ "X-Modal-Form": "1", "Accept": "application/json" }) : { "X-Modal-Form": "1", "Accept": "application/json" },
         credentials: "same-origin",
       })
         .then(function (res) { return res.json().then(function (data) { return { res: res, data: data }; }); })
@@ -940,7 +940,7 @@
       fetch(form.action, {
         method: "POST",
         body: fd,
-        headers: { "X-Modal-Form": "1", "Accept": "application/json" },
+        headers: window.csrfHeaders ? window.csrfHeaders({ "X-Modal-Form": "1", "Accept": "application/json" }) : { "X-Modal-Form": "1", "Accept": "application/json" },
         credentials: "same-origin",
       })
         .then(function (res) { return res.json().then(function (data) { return { res: res, data: data }; }); })

@@ -28,6 +28,7 @@ from app.admin_helpers import (
     resolve_stats_period,
 )
 from app.config import get_settings
+from app.csrf import get_or_create_csrf_token, rotate_csrf_token
 from app.csv_stream import stream_csv
 from app.database import get_db
 from app.models import Click, Link, Profile
@@ -78,6 +79,7 @@ from app.stats_range import (
 from app.utils.bulk_labels import MAX_BULK_LABELS, parse_label_lines
 from app.utils.csv_import import MAX_IMPORT_ROWS, parse_links_import_csv
 from app.utils.slug import random_slug
+from app.url_validation import is_valid_destination_url
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -114,6 +116,7 @@ def _indicators_filter_href(
 templates.env.globals["indicators_filter_href"] = (
     lambda prof, plat: _indicators_filter_href(prof, plat, active_preset="all", period_from="", period_to="")
 )
+templates.env.globals["get_csrf_token"] = get_or_create_csrf_token
 
 
 def _require_admin(request: Request) -> None:
@@ -155,7 +158,9 @@ async def login_post(
     ip = client_ip(request)
     if verify_env_password(password, settings.admin_password):
         await clear_admin_failures(db, ip)
+        request.session.clear()
         request.session["admin"] = True
+        rotate_csrf_token(request)
         return RedirectResponse("/admin", status_code=302)
     banned = await record_admin_password_failure(db, ip)
     if banned:
@@ -179,10 +184,16 @@ async def login_post(
     )
 
 
-@router.get("/logout")
-async def logout(request: Request) -> RedirectResponse:
+@router.post("/logout")
+async def logout_post(request: Request) -> RedirectResponse:
     request.session.clear()
     return RedirectResponse("/admin/login", status_code=302)
+
+
+@router.get("/logout")
+async def logout_get(request: Request) -> RedirectResponse:
+    """Старые закладки GET /logout → форма выхода на /admin."""
+    return RedirectResponse("/admin", status_code=302)
 
 
 @router.get("/avatar/{link_id}")
@@ -441,8 +452,11 @@ async def api_traffic_insights(
 
 
 def _valid_url(url: str) -> bool:
-    u = url.strip()
-    return u.startswith("http://") or u.startswith("https://")
+    settings = get_settings()
+    return is_valid_destination_url(
+        url,
+        allow_private_hosts=settings.allow_private_destination_urls,
+    )
 
 
 async def _unique_slug(db: AsyncSession) -> str:

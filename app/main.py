@@ -13,7 +13,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.jobs import cleanup_old_clicks
+from app.middleware.csrf import CsrfMiddleware
 from app.middleware.ip_ban import IpAuthBanMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.database import get_db
 from app.routers import admin, api_v1, health, redirect
 from app.routers.admin import render_indicators_page
@@ -44,8 +46,14 @@ class NoCacheAdminHtmlMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings = get_settings()
-    # В Docker/Railway в stdout попадает в основном uvicorn — иначе app.main INFO не виден.
+    settings.validate_security()
     boot_log = logging.getLogger("uvicorn.error")
+    boot_log.info(
+        "Security: APP_ENV=%s openapi=%s csrf=%s",
+        settings.app_env,
+        not settings.openapi_disabled(),
+        settings.csrf_enabled,
+    )
     geolite_downloaded = False
     try:
         geolite_downloaded = await asyncio.to_thread(
@@ -85,7 +93,17 @@ async def lifespan(_app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Bio links", lifespan=lifespan)
+    app = FastAPI(
+        title="Bio links",
+        lifespan=lifespan,
+        docs_url=None if settings.openapi_disabled() else "/docs",
+        redoc_url=None if settings.openapi_disabled() else "/redoc",
+        openapi_url=None if settings.openapi_disabled() else "/openapi.json",
+    )
+    app.add_middleware(IpAuthBanMiddleware)
+    app.add_middleware(NoCacheAdminHtmlMiddleware)
+    app.add_middleware(CsrfMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.secret_key,
@@ -93,8 +111,6 @@ def create_app() -> FastAPI:
         same_site="lax",
         https_only=settings.session_cookie_https_only,
     )
-    app.add_middleware(NoCacheAdminHtmlMiddleware)
-    app.add_middleware(IpAuthBanMiddleware)
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

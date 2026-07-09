@@ -23,15 +23,11 @@ MSG_BAN_HTML = (
 )
 
 
+from app.request_utils import get_client_ip
+
+
 def client_ip(request: Request) -> str:
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        part = xff.split(",")[0].strip()
-        if part:
-            return part[:45]
-    if request.client and request.client.host:
-        return request.client.host[:45]
-    return "0.0.0.0"
+    return (get_client_ip(request) or "0.0.0.0")[:45]
 
 
 async def _get_row(db: AsyncSession, ip: str) -> IpAuthLockout | None:
