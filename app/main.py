@@ -5,7 +5,7 @@ from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -134,6 +134,14 @@ def create_app() -> FastAPI:
 
     templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
     register_template_globals(templates.env)
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon_ico():
+        return FileResponse(
+            static_dir / "favicon.svg",
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
 
     @app.get("/privacy", response_class=HTMLResponse)
     async def privacy_page(request: Request):
