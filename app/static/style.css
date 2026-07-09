@@ -65,6 +65,7 @@ body {
   background: var(--bg);
   position: relative;
   -webkit-tap-highlight-color: rgba(129, 140, 248, 0.15);
+  overflow-x: clip;
 }
 
 .bg-grid {
@@ -1332,11 +1333,11 @@ a:hover {
   .links-sidebar {
     border-right: none;
     border-bottom: 1px solid var(--border-strong);
-    padding: 1rem 0.25rem 1rem;
+    padding: 1rem 0 1rem;
   }
 
   .links-main {
-    padding: 1rem 0.25rem 0;
+    padding: 1rem 0 0;
   }
 }
 
@@ -2292,13 +2293,44 @@ button[type="submit"].btn-primary {
   }
 
   .main {
-    padding: 1.15rem max(0.85rem, env(safe-area-inset-left)) 2rem
-      max(0.85rem, env(safe-area-inset-right));
-    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+    width: 100%;
+    max-width: 100%;
+    padding: 0.85rem max(0.5rem, env(safe-area-inset-left)) 1.75rem
+      max(0.5rem, env(safe-area-inset-right));
+    padding-bottom: max(1.75rem, env(safe-area-inset-bottom));
   }
 
-  .card {
-    padding: 1.25rem 1.1rem;
+  .card:not(.card--flush) {
+    padding: 1.15rem 0.75rem;
+  }
+
+  .card.card--flush {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 1rem;
+    padding-bottom: 0;
+  }
+
+  .admin-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .admin-actions .btn {
+    width: 100%;
+    min-height: 2.75rem;
+    justify-content: center;
+  }
+
+  .links-layout {
+    margin-top: 1rem;
+  }
+
+  .top {
+    padding-left: max(0.65rem, env(safe-area-inset-left));
+    padding-right: max(0.65rem, env(safe-area-inset-right));
   }
 
   .stats-toolbar {
@@ -2369,6 +2401,10 @@ button[type="submit"].btn-primary {
 
   .stats-meta {
     font-size: 0.85rem;
+  }
+
+  .account-search-row {
+    max-width: none;
   }
 
   .row.between.wrap {
@@ -2451,7 +2487,7 @@ button[type="submit"].btn-primary {
   }
 
   .table--wide {
-    min-width: min(32rem, 100%);
+    min-width: 100%;
   }
 
   .table-wrap {
