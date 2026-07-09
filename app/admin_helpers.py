@@ -123,6 +123,32 @@ async def load_profiles(db: AsyncSession) -> list[Profile]:
     return list(res.scalars().all())
 
 
+async def earliest_link_created_at(db: AsyncSession):
+    from app.services.stats_cache import set_cached_earliest_link, try_get_cached_earliest_link
+
+    hit, val = try_get_cached_earliest_link()
+    if hit:
+        return val
+    row = await db.execute(select(func.min(Link.created_at)))
+    val = row.scalar_one_or_none()
+    set_cached_earliest_link(val)
+    return val
+
+
+async def cached_sidebar_link_counts(
+    db: AsyncSession,
+) -> tuple[dict[str, int], dict[str, int]]:
+    from app.services.stats_cache import get_cached_sidebar_counts, set_cached_sidebar_counts
+
+    cached = get_cached_sidebar_counts()
+    if cached is not None:
+        return cached
+    prof = await profile_link_counts(db)
+    plat = await platform_link_counts(db)
+    set_cached_sidebar_counts(prof, plat)
+    return prof, plat
+
+
 async def profile_link_counts(db: AsyncSession) -> dict[str, int]:
     rows = (
         await db.execute(select(Link.profile_id, func.count()).group_by(Link.profile_id))
@@ -136,11 +162,6 @@ async def profile_link_counts(db: AsyncSession) -> dict[str, int]:
         counts[key] = n
     counts["all"] = total
     return counts
-
-
-async def earliest_link_created_at(db: AsyncSession):
-    row = await db.execute(select(func.min(Link.created_at)))
-    return row.scalar_one_or_none()
 
 
 def resolve_stats_period(

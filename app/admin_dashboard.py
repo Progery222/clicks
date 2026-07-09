@@ -18,10 +18,8 @@ from app.admin_helpers import (
 )
 from app.models import Click, Link
 from app.platforms import PLATFORMS, platform_color, platform_label
-from app.services.account_avatar import sync_avatars_from_accountstats
 from app.services.admin_avatar import admin_avatar_href
 from app.services.stats import (
-    aggregate_clicks_for_links,
     click_counts_for_links_period,
     dashboard_click_counts,
     platform_click_stats,
@@ -148,7 +146,6 @@ async def load_dashboard_page_data(
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
     stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account_term)
     links = list((await db.execute(stmt)).scalars().all())
-    await sync_avatars_from_accountstats(db, links, limit=max(len(links), 1))
     link_ids = [link.id for link in links]
 
     earliest_row = await db.execute(select(func.min(Link.created_at)))
@@ -170,10 +167,26 @@ async def load_dashboard_page_data(
     except Exception:
         period_map = {}
 
-    try:
-        period_total, period_uniques = await aggregate_clicks_for_links(db, link_ids, start, end)
-    except Exception:
-        period_total, period_uniques = 0, 0
+    period_total = sum(pc for pc, _ in period_map.values())
+    if link_ids:
+        try:
+            period_uniques = int(
+                (
+                    await db.execute(
+                        select(func.count(func.distinct(Click.dedupe_key)))
+                        .select_from(Click)
+                        .where(
+                            Click.link_id.in_(link_ids),
+                            Click.created_at >= start,
+                            Click.created_at < end,
+                        )
+                    )
+                ).scalar_one()
+            )
+        except Exception:
+            period_uniques = sum(pu for _, pu in period_map.values())
+    else:
+        period_uniques = 0
 
     try:
         plat_stats_raw = await platform_click_stats(db, link_ids, start, end)

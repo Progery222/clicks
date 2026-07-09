@@ -1,7 +1,7 @@
 import uuid
-from datetime import UTC, date
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response
@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models import Link
 from app.request_utils import get_client_ip
 from app.services.redirect_rate_limit import allow_redirect
-from app.services.clicks import insert_click
+from app.services.clicks import log_click_background
 from app.services.dedupe import dedupe_key_for_visitor, fingerprint_fallback, parse_vid_cookie
 from app.url_validation import safe_redirect_location
 
@@ -24,6 +24,7 @@ VID_COOKIE = "vid"
 async def redirect_slug(
     slug: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     res = await db.execute(select(Link).where(Link.slug == slug))
@@ -53,8 +54,8 @@ async def redirect_slug(
         set_cookie_val = str(visitor_uuid)
         dedupe_key = fingerprint_fallback(ip, ua, date.today())
 
-    await insert_click(
-        db,
+    background_tasks.add_task(
+        log_click_background,
         link_id=link.id,
         ip=ip,
         user_agent=ua,

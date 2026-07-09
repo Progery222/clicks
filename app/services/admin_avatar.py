@@ -95,8 +95,8 @@ async def resolve_and_cache_link_avatar(db: AsyncSession, link: Link) -> str | N
                 return link.account_avatar_url
 
             async with _http_resolve_sem:
-                async with httpx.AsyncClient(
-                    headers=_FETCH_HEADERS, follow_redirects=True, timeout=15.0
+                async with create_safe_http_client(
+                    headers=_FETCH_HEADERS, timeout=15.0
                 ) as client:
                     if mode == AVATAR_MODE_PHOTO:
                         pic = await _fetch_photo_url(link.label, link.platform, client)

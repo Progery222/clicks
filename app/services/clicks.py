@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Click
 from app.services.dedupe import dedupe_key_for_visitor
 from app.services.geoip import lookup_ip
-from app.services.stats_cache import invalidate_dashboard_counts_cache
+from app.services.stats_cache import bump_dashboard_counts_on_click, invalidate_dashboard_counts_cache
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def insert_click(
     )
     session.add(row)
     await session.commit()
-    invalidate_dashboard_counts_cache()
+    bump_dashboard_counts_on_click(link_id)
 
 
 async def log_click_background(
@@ -49,6 +49,7 @@ async def log_click_background(
     user_agent: str | None,
     referer: str | None,
     visitor_uuid: uuid.UUID,
+    dedupe_key: str | None = None,
 ) -> None:
     from app.database import AsyncSessionLocal
 
@@ -61,6 +62,7 @@ async def log_click_background(
                 user_agent=user_agent,
                 referer=referer,
                 visitor_uuid=visitor_uuid,
+                dedupe_key=dedupe_key,
             )
     except Exception:
         log.exception("Failed to record click for link_id=%s", link_id)

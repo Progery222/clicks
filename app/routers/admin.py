@@ -25,6 +25,7 @@ from app.admin_helpers import (
     parse_profile_id,
     platform_link_counts,
     profile_link_counts,
+    cached_sidebar_link_counts,
     resolve_stats_period,
 )
 from app.config import get_settings
@@ -69,7 +70,10 @@ from app.services.stats import (
     top_referers,
     top_user_agents,
 )
-from app.services.stats_cache import invalidate_dashboard_counts_cache
+from app.services.stats_cache import (
+    invalidate_dashboard_counts_cache,
+    invalidate_sidebar_counts_cache,
+)
 from app.stats_range import (
     DASHBOARD_DEFAULT_PRESET,
     active_preset,
@@ -330,8 +334,7 @@ async def dashboard(
             + build_filter_query(prof, plat, account=account),
         }
     profiles = await load_profiles(db)
-    prof_counts = await profile_link_counts(db)
-    plat_counts = await platform_link_counts(db)
+    prof_counts, plat_counts = await cached_sidebar_link_counts(db)
     profile_filters = [
         {"id": "all", "name": "Все профили", "color": None, "count": prof_counts.get("all", 0)},
         {
@@ -402,8 +405,7 @@ async def api_link_counts(
     stmt = select(Link.id)
     stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account)
     link_ids = list((await db.execute(stmt)).scalars().all())
-    earliest_row = await db.execute(select(func.min(Link.created_at)))
-    earliest = earliest_row.scalar_one_or_none()
+    earliest = await earliest_link_created_at(db)
     start, end = dashboard_stats_range(date_from, date_to, preset, earliest=earliest)
     try:
         all_time = await dashboard_click_counts(db)

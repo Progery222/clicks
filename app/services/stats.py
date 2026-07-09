@@ -14,19 +14,21 @@ async def stats_summary(
     start: datetime,
     end: datetime,
 ) -> tuple[int, int]:
-    total_q = await session.execute(
-        select(func.count())
-        .select_from(Click)
-        .where(Click.link_id == link_id, Click.created_at >= start, Click.created_at < end)
-    )
-    total = int(total_q.scalar_one())
-    uniq_q = await session.execute(
-        select(func.count(func.distinct(Click.dedupe_key)))
-        .select_from(Click)
-        .where(Click.link_id == link_id, Click.created_at >= start, Click.created_at < end)
-    )
-    uniq = int(uniq_q.scalar_one())
-    return total, uniq
+    row = (
+        await session.execute(
+            select(
+                func.count(),
+                func.count(func.distinct(Click.dedupe_key)),
+            )
+            .select_from(Click)
+            .where(
+                Click.link_id == link_id,
+                Click.created_at >= start,
+                Click.created_at < end,
+            )
+        )
+    ).one()
+    return int(row[0]), int(row[1])
 
 
 def click_day_bucket_utc():
@@ -277,32 +279,32 @@ async def click_counts_for_links_period(
     end: datetime,
 ) -> dict[uuid.UUID, tuple[int, int]]:
     """По каждой ссылке: (клики за период, уникальные за период)."""
+    from app.services.stats_cache import get_cached_period_counts, set_cached_period_counts
+
     if not link_ids:
         return {}
+
+    cached = get_cached_period_counts(link_ids, start, end)
+    if cached is not None:
+        return cached
+
     where = [Click.link_id.in_(link_ids), Click.created_at >= start, Click.created_at < end]
-    totals = (
+    rows = (
         await session.execute(
-            select(Click.link_id, func.count()).where(*where).group_by(Click.link_id)
-        )
-    ).all()
-    uniqs = (
-        await session.execute(
-            select(Click.link_id, func.count(func.distinct(Click.dedupe_key)))
+            select(
+                Click.link_id,
+                func.count().label("clicks"),
+                func.count(func.distinct(Click.dedupe_key)).label("uniques"),
+            )
             .where(*where)
             .group_by(Click.link_id)
         )
     ).all()
     out: dict[uuid.UUID, tuple[int, int]] = {}
-    for lid_raw, cnt in totals:
+    for lid_raw, clicks, uniques in rows:
         lid = lid_raw if isinstance(lid_raw, uuid.UUID) else uuid.UUID(str(lid_raw))
-        out[lid] = (int(cnt), 0)
-    for lid_raw, cnt in uniqs:
-        lid = lid_raw if isinstance(lid_raw, uuid.UUID) else uuid.UUID(str(lid_raw))
-        n = int(cnt)
-        if lid in out:
-            out[lid] = (out[lid][0], n)
-        else:
-            out[lid] = (0, n)
+        out[lid] = (int(clicks), int(uniques))
+    set_cached_period_counts(link_ids, start, end, out)
     return out
 
 

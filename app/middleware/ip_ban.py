@@ -21,6 +21,9 @@ class IpAuthBanMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         ip = client_ip(request)
+        if path.startswith("/admin/avatar/"):
+            return await call_next(request)
+
         try:
             async with AsyncSessionLocal() as session:
                 if path.startswith("/api/v1"):
