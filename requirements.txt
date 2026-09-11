@@ -13,5 +13,4 @@ geoip2==4.8.0
 maxminddb==2.8.2
 httpx==0.28.1
 apscheduler==3.10.4
-sqladmin==0.31.1
-wtforms==3.1.2
+sqladmin==0.21.0
