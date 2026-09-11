@@ -188,6 +188,7 @@ export function LinksPage() {
                     <th>Название</th>
                     <th>Платф.</th>
                     <th>Аккаунт</th>
+                    <th>Цель</th>
                     <th className="num">
                       <button type="button" className="btn btn-ghost" onClick={() => toggleSort('total')}>
                         Всего
@@ -221,6 +222,16 @@ export function LinksPage() {
                           <span>{row.account_display}</span>
                         </span>
                       </td>
+                      <td
+                        className="muted small"
+                        style={{ maxWidth: '16rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={row.destination_url}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <a href={row.destination_url} target="_blank" rel="noreferrer">
+                          {row.destination_url}
+                        </a>
+                      </td>
                       <td className="num">{row.total}</td>
                       <td className="num">{row.today}</td>
                       <td className="num" onClick={(e) => e.stopPropagation()}>
@@ -237,7 +248,7 @@ export function LinksPage() {
                   ))}
                   {!data.links.length ? (
                     <tr style={{ cursor: 'default' }}>
-                      <td colSpan={6} className="muted">
+                      <td colSpan={7} className="muted">
                         Нет ссылок по фильтру
                       </td>
                     </tr>
