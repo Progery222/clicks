@@ -36,7 +36,7 @@ class NoCacheAdminHtmlMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         path = request.url.path
-        if path.startswith("/admin/avatar/"):
+        if path.startswith("/admin/avatar/") or path.startswith("/admin/api/destination-favicon"):
             return response
         if path.startswith("/admin") or path.startswith("/api") or path.startswith("/sqladmin") or path in ("/privacy", "/indicators"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

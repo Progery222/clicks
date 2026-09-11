@@ -85,11 +85,13 @@ def destination_host(url: str) -> str | None:
 
 
 def destination_site_icon_url(url: str) -> str | None:
-    """Favicon домена цели (основное изображение в сайдбаре)."""
+    """URL иконки цели: наш прокси (реальный favicon сайта, без Google-глобуса)."""
     host = destination_host(url)
     if not host:
         return None
-    return f"https://www.google.com/s2/favicons?domain={host}&sz=128"
+    from app.services.destination_favicon import destination_favicon_href
+
+    return destination_favicon_href(host)
 
 
 def destination_icons(url: str, *, platform_id: str | None = None) -> tuple[str | None, str | None]:
@@ -97,9 +99,9 @@ def destination_icons(url: str, *, platform_id: str | None = None) -> tuple[str 
     icon = destination_site_icon_url(url)
     plat = detect_platform_from_text(url) or platform_id
     plat_icon = platform_favicon_url(plat)
-    # Если цель сама — известная платформа, основным показываем её значок
+    # Известная платформа-цель: значок платформы + наш favicon как запасной путь на клиенте
     if plat_icon and detect_platform_from_text(url):
-        return plat_icon, plat_icon
+        return icon or plat_icon, plat_icon
     return icon, plat_icon
 
 

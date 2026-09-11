@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +64,7 @@ from app.services.stats import (
     top_os,
     top_os_for_links,
 )
+from app.services.destination_favicon import resolve_destination_favicon
 from app.services.stats_cache import invalidate_dashboard_counts_cache
 from app.stats_range import DASHBOARD_DEFAULT_PRESET, active_preset, form_period_dates, stats_range
 from app.url_validation import is_valid_destination_url
@@ -94,10 +96,36 @@ async def _unique_slug(db: AsyncSession) -> str:
     raise HTTPException(status_code=500, detail="Could not allocate slug")
 
 
+@router.get("/destination-favicon")
+async def destination_favicon(
+    request: Request,
+    host: str = Query(..., min_length=3, max_length=253),
+) -> Response:
+    """Прокси favicon домена цели (без Google-заглушки-глобуса)."""
+    _require_admin(request)
+    cleaned = host.strip().lower().removeprefix("www.")
+    if not re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+", cleaned):
+        raise HTTPException(status_code=404, detail="Not found")
+    cached = await resolve_destination_favicon(cleaned)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    inm = request.headers.get("if-none-match")
+    if inm and inm.strip('"') == cached.etag:
+        return Response(status_code=304, headers={"ETag": f'"{cached.etag}"'})
+    return Response(
+        content=cached.content,
+        media_type=cached.media_type,
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "ETag": f'"{cached.etag}"',
+        },
+    )
+
+
 def _serialize_link(link: Link) -> dict[str, Any]:
     account_display = account_label_display(link.label) or link.label or link.slug
     display_name = (link.title or "").strip() or account_display
-    dest_icon, _dest_plat_icon = destination_icons(link.destination_url)
+    dest_icon, dest_plat_icon = destination_icons(link.destination_url)
     return {
         "id": str(link.id),
         "slug": link.slug,
@@ -109,6 +137,7 @@ def _serialize_link(link: Link) -> dict[str, Any]:
         "platform_color": platform_color(link.platform),
         "platform_icon_url": platform_favicon_url(link.platform),
         "destination_icon_url": dest_icon or destination_site_icon_url(link.destination_url),
+        "destination_icon_fallback_url": dest_plat_icon,
         "profile_id": str(link.profile_id) if link.profile_id else None,
         "profile": (
             {"id": str(link.profile.id), "name": link.profile.name, "color": link.profile.color}
