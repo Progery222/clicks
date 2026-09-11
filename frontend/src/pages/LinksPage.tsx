@@ -146,16 +146,24 @@ export function LinksPage() {
                     title={it.id === 'all' ? undefined : it.id}
                     onClick={() => setFilter({ destination: it.id })}
                   >
-                    <span
-                      className="ring"
-                      aria-hidden
-                      style={{
-                        background: active ? 'var(--accent)' : 'var(--surface-2)',
-                        color: active ? '#fff' : 'var(--muted)',
-                      }}
-                    >
-                      {it.id === 'all' ? '∗' : (it.name || '?').slice(0, 1).toUpperCase()}
-                    </span>
+                    {it.id === 'all' ? (
+                      <span
+                        className="ring"
+                        aria-hidden
+                        style={{
+                          background: active ? 'var(--accent)' : 'var(--surface-2)',
+                          color: active ? '#fff' : 'var(--muted)',
+                        }}
+                      >
+                        ∗
+                      </span>
+                    ) : (
+                      <Avatar
+                        url={it.icon_url}
+                        fallbackUrl={it.platform_icon_url}
+                        name={it.name}
+                      />
+                    )}
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {it.name}
                     </span>

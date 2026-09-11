@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import Click, Link, Profile
+from app.platforms import detect_platform_from_text, platform_favicon_url
 from app.stats_range import dashboard_stats_range, parse_range
 
 
@@ -69,6 +70,37 @@ def destination_display_label(url: str) -> str:
     except Exception:
         pass
     return s if len(s) <= 80 else s[:77] + "…"
+
+
+def destination_host(url: str) -> str | None:
+    s = (url or "").strip()
+    if not s:
+        return None
+    try:
+        parsed = urlparse(s if "://" in s else f"https://{s}")
+        host = (parsed.netloc or "").lower().removeprefix("www.")
+        return host or None
+    except Exception:
+        return None
+
+
+def destination_site_icon_url(url: str) -> str | None:
+    """Favicon домена цели (основное изображение в сайдбаре)."""
+    host = destination_host(url)
+    if not host:
+        return None
+    return f"https://www.google.com/s2/favicons?domain={host}&sz=128"
+
+
+def destination_icons(url: str, *, platform_id: str | None = None) -> tuple[str | None, str | None]:
+    """(icon_url, platform_icon_url) для пункта сайдбара по цели."""
+    icon = destination_site_icon_url(url)
+    plat = detect_platform_from_text(url) or platform_id
+    plat_icon = platform_favicon_url(plat)
+    # Если цель сама — известная платформа, основным показываем её значок
+    if plat_icon and detect_platform_from_text(url):
+        return plat_icon, plat_icon
+    return icon, plat_icon
 
 
 def account_label_ilike(term: str):
@@ -263,17 +295,49 @@ async def destination_link_filters(db: AsyncSession) -> list[dict]:
             .order_by(func.count().desc(), Link.destination_url.asc())
         )
     ).all()
+
+    plat_rows = (
+        await db.execute(
+            select(Link.destination_url, Link.platform, func.count())
+            .group_by(Link.destination_url, Link.platform)
+        )
+    ).all()
+    majority_platform: dict[str, str | None] = {}
+    plat_best: dict[str, tuple[int, str | None]] = {}
+    for dest, plat, cnt in plat_rows:
+        key = str(dest)
+        n = int(cnt)
+        prev = plat_best.get(key)
+        if prev is None or n > prev[0]:
+            plat_best[key] = (n, plat)
+    for key, (_, plat) in plat_best.items():
+        majority_platform[key] = plat
+
     items: list[dict] = []
     total = 0
     for url, cnt in rows:
         n = int(cnt)
         total += n
         raw = str(url)
+        icon_url, platform_icon_url = destination_icons(
+            raw, platform_id=majority_platform.get(raw)
+        )
         items.append(
             {
                 "id": raw,
                 "name": destination_display_label(raw),
                 "count": n,
+                "icon_url": icon_url,
+                "platform_icon_url": platform_icon_url,
             }
         )
-    return [{"id": "all", "name": "Все цели", "count": total}, *items]
+    return [
+        {
+            "id": "all",
+            "name": "Все цели",
+            "count": total,
+            "icon_url": None,
+            "platform_icon_url": None,
+        },
+        *items,
+    ]

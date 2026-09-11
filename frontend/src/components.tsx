@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from './auth'
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -135,16 +135,40 @@ export function BarChart({ items, limit = 8 }: { items: { label: string; count: 
 
 export function Avatar({
   url,
+  fallbackUrl,
   name,
   size = 'sm',
 }: {
   url?: string | null
+  fallbackUrl?: string | null
   name: string
   size?: 'sm' | 'lg'
 }) {
   const letter = (name || '?').slice(0, 1).toUpperCase()
-  if (url) {
-    return <img className={`avatar${size === 'lg' ? ' avatar--lg' : ''}`} src={url} alt="" loading="lazy" />
+  const primary = url || null
+  const secondary = fallbackUrl && fallbackUrl !== primary ? fallbackUrl : null
+  const [src, setSrc] = useState<string | null>(primary || secondary)
+
+  useEffect(() => {
+    setSrc(primary || secondary)
+  }, [primary, secondary])
+
+  if (src) {
+    return (
+      <img
+        className={`avatar${size === 'lg' ? ' avatar--lg' : ''}`}
+        src={src}
+        alt=""
+        loading="lazy"
+        onError={() => {
+          if (primary && src === primary && secondary) {
+            setSrc(secondary)
+          } else {
+            setSrc(null)
+          }
+        }}
+      />
+    )
   }
   return (
     <span className={`avatar avatar-letter${size === 'lg' ? ' avatar--lg' : ''}`} aria-hidden>
