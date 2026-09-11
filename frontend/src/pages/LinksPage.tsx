@@ -325,7 +325,18 @@ export function LinksPage() {
             setSp(sp, { replace: true })
           }
         }}
-        onCreated={(id) => nav(`/admin/links/${id}/stats`)}
+        onCreated={(ids) => {
+          if (ids.length === 1) {
+            nav(`/admin/links/${ids[0]}/stats`)
+          } else {
+            setNewOpen(false)
+            if (sp.get('new')) {
+              sp.delete('new')
+              setSp(sp, { replace: true })
+            }
+            void load()
+          }
+        }}
       />
       <BulkModal
         open={bulkOpen}
@@ -485,7 +496,10 @@ function EditLinkModal({
             rows={3}
             placeholder="https://instagram.com/one, https://t.me/two"
           />
-          <span className="muted small">Несколько аккаунтов — через запятую или с новой строки</span>
+          <span className="muted small">
+            Несколько аккаунтов — через запятую или с новой строки. Разные платформы разойдутся на
+            отдельные ссылки
+          </span>
         </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
           Сохранить
@@ -502,7 +516,7 @@ function NewLinkModal({
 }: {
   open: boolean
   onClose: () => void
-  onCreated: (id: string) => void
+  onCreated: (ids: string[]) => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -512,7 +526,7 @@ function NewLinkModal({
     setError(null)
     const fd = new FormData(e.currentTarget)
     try {
-      const res = await api<{ link: LinkRow }>('/admin/api/links', {
+      const res = await api<{ link: LinkRow; links?: LinkRow[]; created?: number }>('/admin/api/links', {
         method: 'POST',
         json: {
           destination_url: fd.get('destination_url'),
@@ -520,7 +534,8 @@ function NewLinkModal({
           label: fd.get('label') || null,
         },
       })
-      onCreated(res.link.id)
+      const ids = (res.links?.length ? res.links : [res.link]).map((l) => l.id)
+      onCreated(ids)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Ошибка')
     } finally {
@@ -547,7 +562,10 @@ function NewLinkModal({
             rows={3}
             placeholder="https://instagram.com/one, https://t.me/two"
           />
-          <span className="muted small">Несколько аккаунтов — через запятую или с новой строки</span>
+          <span className="muted small">
+            Несколько аккаунтов — через запятую или с новой строки. Разные платформы разойдутся на
+            отдельные ссылки
+          </span>
         </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Создать

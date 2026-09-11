@@ -13,9 +13,24 @@ def apply_link_title(link: Link, title: str | None) -> None:
     link.title = (title or "").strip() or None
 
 
-def apply_link_label(link: Link, label: str | None) -> None:
-    """Один или несколько аккаунтов (строка / запятая) — храним через перевод строки."""
+def group_accounts_by_platform(label: str | None) -> list[tuple[str | None, list[str]]]:
+    """Разбить аккаунты на группы по детектированной платформе (порядок первого появления)."""
     accounts = parse_label_lines(label or "")
+    if not accounts:
+        return []
+    groups: dict[str | None, list[str]] = {}
+    order: list[str | None] = []
+    for acc in accounts:
+        plat = detect_platform_from_text(acc)
+        if plat not in groups:
+            groups[plat] = []
+            order.append(plat)
+        groups[plat].append(acc)
+    return [(plat, groups[plat]) for plat in order]
+
+
+def apply_link_accounts(link: Link, accounts: list[str]) -> None:
+    """Записать список аккаунтов и выставить platform по первому детектируемому."""
     link.label = "\n".join(accounts) if accounts else None
     platform = None
     for acc in accounts:
@@ -27,6 +42,11 @@ def apply_link_label(link: Link, label: str | None) -> None:
     link.platform = platform
     link.account_avatar_url = None
     link.account_avatar_mode = "auto"
+
+
+def apply_link_label(link: Link, label: str | None) -> None:
+    """Один или несколько аккаунтов (строка / запятая) — храним через перевод строки."""
+    apply_link_accounts(link, parse_label_lines(label or ""))
 
 
 def apply_link_profile(link: Link, profile_id: uuid.UUID | None) -> None:

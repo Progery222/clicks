@@ -42,7 +42,13 @@ from app.services.ip_lockout import (
     record_admin_password_failure,
 )
 from app.services.label_match import account_label_display
-from app.services.links_meta import apply_link_label, apply_link_profile, apply_link_title
+from app.services.links_meta import (
+    apply_link_accounts,
+    apply_link_label,
+    apply_link_profile,
+    apply_link_title,
+    group_accounts_by_platform,
+)
 from app.services.stats import (
     aggregate_clicks_for_links,
     bar_chart_items,
@@ -341,17 +347,36 @@ async def create_link(
     _require_admin(request)
     if not _valid_url(body.destination_url):
         raise HTTPException(status_code=400, detail="URL должен начинаться с http:// или https://")
-    slug = await _unique_slug(db)
-    link = Link(slug=slug, destination_url=body.destination_url.strip())
-    apply_link_title(link, body.title)
-    apply_link_label(link, body.label)
-    apply_link_profile(link, parse_profile_id(body.profile_id or ""))
-    db.add(link)
-    await bootstrap_link_avatar(db, link)
+    dest_url = body.destination_url.strip()
+    pid = parse_profile_id(body.profile_id or "")
+    groups = group_accounts_by_platform(body.label)
+    # Без аккаунтов или одна платформа — одна ссылка; разные платформы — по ссылке на группу
+    if not groups:
+        groups = [(None, [])]
+
+    created: list[Link] = []
+    for _, accounts in groups:
+        slug = await _unique_slug(db)
+        link = Link(slug=slug, destination_url=dest_url)
+        apply_link_title(link, body.title)
+        apply_link_accounts(link, accounts)
+        apply_link_profile(link, pid)
+        db.add(link)
+        created.append(link)
+    for link in created:
+        await bootstrap_link_avatar(db, link)
     await db.commit()
-    await db.refresh(link, attribute_names=["profile"])
+    for link in created:
+        await db.refresh(link, attribute_names=["profile"])
     invalidate_dashboard_counts_cache()
-    return JSONResponse({"link": _serialize_link(link)}, status_code=201)
+    return JSONResponse(
+        {
+            "link": _serialize_link(created[0]),
+            "links": [_serialize_link(l) for l in created],
+            "created": len(created),
+        },
+        status_code=201,
+    )
 
 
 @router.post("/links/bulk")
@@ -477,15 +502,41 @@ async def update_link(
         link.destination_url = body.destination_url.strip()
     if body.title is not None:
         apply_link_title(link, body.title)
+    extra_links: list[Link] = []
     if body.label is not None:
-        apply_link_label(link, body.label)
+        groups = group_accounts_by_platform(body.label)
+        if not groups:
+            apply_link_accounts(link, [])
+        else:
+            apply_link_accounts(link, groups[0][1])
+            dest_url = link.destination_url
+            title = link.title
+            pid = link.profile_id
+            for _, accounts in groups[1:]:
+                slug = await _unique_slug(db)
+                extra = Link(slug=slug, destination_url=dest_url)
+                apply_link_title(extra, title)
+                apply_link_accounts(extra, accounts)
+                apply_link_profile(extra, pid)
+                db.add(extra)
+                extra_links.append(extra)
+            for extra in extra_links:
+                await bootstrap_link_avatar(db, extra)
     if body.profile_id is not None:
         apply_link_profile(link, parse_profile_id(body.profile_id))
     await db.commit()
     await db.refresh(link, attribute_names=["profile"])
+    for extra in extra_links:
+        await db.refresh(extra, attribute_names=["profile"])
     invalidate_link_avatar_cache(link.id)
     invalidate_dashboard_counts_cache()
-    return JSONResponse({"link": _serialize_link(link)})
+    return JSONResponse(
+        {
+            "link": _serialize_link(link),
+            "created_extra": len(extra_links),
+            "extra_links": [_serialize_link(l) for l in extra_links],
+        }
+    )
 
 
 @router.delete("/links/{link_id}")

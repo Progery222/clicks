@@ -221,7 +221,10 @@ function EditLinkModal({
             rows={3}
             placeholder="https://instagram.com/one, https://t.me/two"
           />
-          <span className="muted small">Несколько аккаунтов — через запятую или с новой строки</span>
+          <span className="muted small">
+            Несколько аккаунтов — через запятую или с новой строки. Разные платформы разойдутся на
+            отдельные ссылки
+          </span>
         </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
           Сохранить
