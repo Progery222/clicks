@@ -21,6 +21,8 @@ export function LinksPage() {
   const [bulkOpen, setBulkOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [destOpen, setDestOpen] = useState(false)
+  const [actionsLink, setActionsLink] = useState<LinkRow | null>(null)
+  const [editLink, setEditLink] = useState<LinkRow | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -268,7 +270,7 @@ export function LinksPage() {
                         Сегодня
                       </button>
                     </th>
-                    <th className="num">Период</th>
+                    <th className="num">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -303,7 +305,16 @@ export function LinksPage() {
                       </td>
                       <td className="num">{row.total}</td>
                       <td className="num">{row.today}</td>
-                      <td className="num">{row.period_clicks}</td>
+                      <td className="num" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => setActionsLink(row)}
+                          aria-label="Действия"
+                        >
+                          ⋯
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {!data.links.length ? (
@@ -353,7 +364,163 @@ export function LinksPage() {
         }}
       />
       <DestModal open={destOpen} onClose={() => setDestOpen(false)} onDone={() => { setDestOpen(false); void load() }} />
+      <LinkActionsModal
+        open={!!actionsLink}
+        link={actionsLink}
+        onClose={() => setActionsLink(null)}
+        onEdit={() => {
+          if (!actionsLink) return
+          setEditLink(actionsLink)
+          setActionsLink(null)
+        }}
+        onDeleted={() => {
+          setActionsLink(null)
+          void load()
+        }}
+      />
+      <EditLinkModal
+        open={!!editLink}
+        link={editLink}
+        profiles={data?.profiles || []}
+        onClose={() => setEditLink(null)}
+        onSaved={() => {
+          setEditLink(null)
+          void load()
+        }}
+      />
     </div>
+  )
+}
+
+function LinkActionsModal({
+  open,
+  link,
+  onClose,
+  onEdit,
+  onDeleted,
+}: {
+  open: boolean
+  link: LinkRow | null
+  onClose: () => void
+  onEdit: () => void
+  onDeleted: () => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (open) setError(null)
+  }, [open])
+
+  async function onDelete() {
+    if (!link) return
+    if (!confirm('Удалить ссылку и всю статистику?')) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api(`/admin/api/links/${link.id}`, { method: 'DELETE' })
+      onDeleted()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const title = link?.title?.trim() || link?.account_display || link?.slug || 'Ссылка'
+
+  return (
+    <Modal open={open} title="Действия" onClose={onClose}>
+      <div className="stack">
+        <p className="muted small" style={{ margin: 0 }}>
+          {title}
+        </p>
+        {error ? <div className="error-box">{error}</div> : null}
+        <button type="button" className="btn btn-primary" onClick={onEdit} disabled={busy}>
+          Изменить
+        </button>
+        <button type="button" className="btn btn-danger" onClick={() => void onDelete()} disabled={busy}>
+          Удалить
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+function EditLinkModal({
+  open,
+  link,
+  profiles,
+  onClose,
+  onSaved,
+}: {
+  open: boolean
+  link: LinkRow | null
+  profiles: Profile[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (!link) return
+    setBusy(true)
+    setError(null)
+    const fd = new FormData(e.currentTarget)
+    try {
+      await api(`/admin/api/links/${link.id}`, {
+        method: 'PATCH',
+        json: {
+          destination_url: fd.get('destination_url'),
+          title: fd.get('title'),
+          label: fd.get('label'),
+          profile_id: fd.get('profile_id') || '',
+        },
+      })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!link) return null
+
+  return (
+    <Modal open={open} title="Правка ссылки" onClose={onClose}>
+      <form className="stack" onSubmit={onSubmit} key={link.id}>
+        {error ? <div className="error-box">{error}</div> : null}
+        <label className="field-label">
+          Цель
+          <input className="input" name="destination_url" defaultValue={link.destination_url} required />
+        </label>
+        <label className="field-label">
+          Название
+          <input className="input" name="title" defaultValue={link.title || ''} placeholder="Как отображать в таблице" />
+        </label>
+        <label className="field-label">
+          Аккаунт / метка
+          <input className="input" name="label" defaultValue={link.label || ''} />
+        </label>
+        <label className="field-label">
+          Профиль
+          <select className="input" name="profile_id" defaultValue={link.profile_id || ''}>
+            <option value="">Без профиля</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="btn btn-primary" disabled={busy} type="submit">
+          Сохранить
+        </button>
+      </form>
+    </Modal>
   )
 }
 
