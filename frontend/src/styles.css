@@ -535,6 +535,21 @@ textarea {
   background: var(--accent-soft);
 }
 
+.table-check {
+  width: 2.75rem;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.table-checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
 .slug {
   font-family: var(--font-mono);
   font-size: 0.82rem;

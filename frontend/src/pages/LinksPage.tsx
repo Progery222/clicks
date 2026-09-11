@@ -400,9 +400,10 @@ export function LinksPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th style={{ width: '2.25rem' }} onClick={(e) => e.stopPropagation()}>
+                    <th className="table-check">
                       <input
                         type="checkbox"
+                        className="table-checkbox"
                         checked={allVisibleSelected}
                         ref={(el) => {
                           if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected
@@ -452,17 +453,32 @@ export function LinksPage() {
                 </thead>
                 <tbody>
                   {data.links.map((row) => (
-                    <tr key={row.id} onClick={() => nav(`/admin/links/${row.id}/stats`)}>
-                      <td onClick={(e) => e.stopPropagation()}>
+                    <tr
+                      key={row.id}
+                      onClick={(e) => {
+                        const t = e.target as HTMLElement
+                        if (t.closest('input, button, a, label, .table-check')) return
+                        nav(`/admin/links/${row.id}/stats`)
+                      }}
+                    >
+                      <td
+                        className="table-check"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if ((e.target as HTMLElement).closest('input')) return
+                          toggleSelect(row.id)
+                        }}
+                      >
                         <input
                           type="checkbox"
+                          className="table-checkbox"
                           checked={selectedIds.includes(row.id)}
                           onChange={() => toggleSelect(row.id)}
                           aria-label="Выбрать ссылку"
                         />
                       </td>
                       <td>{row.title?.trim() || '—'}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
+                      <td>
                         <AccountCell
                           display={row.account_display}
                           platformIconUrl={row.platform_icon_url}
@@ -485,7 +501,6 @@ export function LinksPage() {
                           whiteSpace: 'nowrap',
                         }}
                         title={row.destination_url}
-                        onClick={(e) => e.stopPropagation()}
                       >
                         <span className="row" style={{ gap: '0.45rem', minWidth: 0 }}>
                           <Avatar
@@ -499,6 +514,7 @@ export function LinksPage() {
                             target="_blank"
                             rel="noreferrer"
                             style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {row.destination_url}
                           </a>
@@ -506,11 +522,14 @@ export function LinksPage() {
                       </td>
                       <td className="num">{row.total}</td>
                       <td className="num">{row.today}</td>
-                      <td className="num" onClick={(e) => e.stopPropagation()}>
+                      <td className="num">
                         <button
                           type="button"
                           className="btn"
-                          onClick={() => setActionsLink(row)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setActionsLink(row)
+                          }}
                           aria-label="Действия"
                         >
                           ⋯
