@@ -187,7 +187,7 @@ export function LinksPage() {
                   <tr>
                     <th>Название</th>
                     <th>Платф.</th>
-                    <th>Аккаунт</th>
+                    <th>С какого аккаунта(ов)</th>
                     <th>Цель</th>
                     <th className="num">
                       <button type="button" className="btn btn-ghost" onClick={() => toggleSort('total')}>
@@ -421,7 +421,7 @@ function EditLinkModal({
           <input className="input" name="title" defaultValue={link.title || ''} placeholder="Как отображать в таблице" />
         </label>
         <label className="field-label">
-          Аккаунт / метка
+          С какого аккаунта(ов)
           <input className="input" name="label" defaultValue={link.label || ''} />
         </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
@@ -477,7 +477,7 @@ function NewLinkModal({
           <input className="input" name="title" placeholder="Как отображать в таблице" />
         </label>
         <label className="field-label">
-          Аккаунт / метка
+          С какого аккаунта(ов)
           <input className="input" name="label" />
         </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>

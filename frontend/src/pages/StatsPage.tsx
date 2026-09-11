@@ -213,7 +213,7 @@ function EditLinkModal({
           <input className="input" name="title" defaultValue={link.title || ''} placeholder="Как отображать в таблице" />
         </label>
         <label className="field-label">
-          Метка
+          С какого аккаунта(ов)
           <input className="input" name="label" defaultValue={link.label || ''} />
         </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
