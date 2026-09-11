@@ -2,6 +2,33 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from './auth'
 
+function IconMoon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M21 14.5A8.5 8.5 0 1 1 9.5 3a7 7 0 0 0 11.5 11.5z" />
+    </svg>
+  )
+}
+
+function IconSun() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  )
+}
+
+function IconLogout() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const { me, theme, cycleTheme, logout } = useAuth()
   const nav = useNavigate()
@@ -40,12 +67,24 @@ export function Shell({ children }: { children: ReactNode }) {
           </NavLink>
         </nav>
         <div className="topbar__actions">
-          <button type="button" className="btn btn-ghost" onClick={cycleTheme} title="Тема">
-            {theme === 'dark' ? 'Светлая' : 'Тёмная'}
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon"
+            onClick={cycleTheme}
+            title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+            aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+          >
+            {theme === 'dark' ? <IconSun /> : <IconMoon />}
           </button>
           {me?.admin ? (
-            <button type="button" className="btn" onClick={onLogout}>
-              Выход
+            <button
+              type="button"
+              className="btn btn-icon"
+              onClick={onLogout}
+              title="Выход"
+              aria-label="Выйти"
+            >
+              <IconLogout />
             </button>
           ) : null}
           <button

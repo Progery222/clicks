@@ -222,6 +222,18 @@ textarea {
   background: transparent;
 }
 
+.btn-icon {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  padding: 0;
+}
+
+.btn-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+}
+
 .input {
   width: 100%;
   min-height: 2.5rem;
