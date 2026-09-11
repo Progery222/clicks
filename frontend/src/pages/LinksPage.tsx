@@ -110,14 +110,36 @@ export function LinksPage() {
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
   const someVisibleSelected = visibleIds.some((id) => selectedIds.includes(id))
 
+  const expandableAccountIds = useMemo(
+    () =>
+      (data?.links || [])
+        .filter((r) => splitAccounts(r.account_display).length > 1)
+        .map((r) => r.id),
+    [data?.links],
+  )
+  const accountsAllExpanded =
+    expandableAccountIds.length > 0 && expandableAccountIds.every((id) => !!expandedAccounts[id])
+
+  function toggleAccountsExpandedAll() {
+    setExpandedAccounts((prev) => {
+      if (accountsAllExpanded) {
+        const next = { ...prev }
+        for (const id of expandableAccountIds) delete next[id]
+        return next
+      }
+      const next = { ...prev }
+      for (const id of expandableAccountIds) next[id] = true
+      return next
+    })
+  }
+
   function toggleSelect(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
   function toggleSelectAllVisible() {
     if (allVisibleSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)))
-    } else {
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)))    } else {
       setSelectedIds((prev) => [...new Set([...prev, ...visibleIds])])
     }
   }
@@ -299,7 +321,30 @@ export function LinksPage() {
                       />
                     </th>
                     <th>Название</th>
-                    <th>С какого аккаунта(ов)</th>
+                    <th>
+                      <span className="row" style={{ gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        С какого аккаунта(ов)
+                        {expandableAccountIds.length > 0 ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            style={{ padding: '0.1rem 0.4rem', minHeight: 0, fontWeight: 600, fontSize: '0.75rem' }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleAccountsExpandedAll()
+                            }}
+                            aria-expanded={accountsAllExpanded}
+                            title={
+                              accountsAllExpanded
+                                ? 'Свернуть все списки аккаунтов'
+                                : 'Развернуть все списки аккаунтов'
+                            }
+                          >
+                            {accountsAllExpanded ? 'свернуть' : 'развернуть'}
+                          </button>
+                        ) : null}
+                      </span>
+                    </th>
                     <th>Цель</th>
                     <th className="num">
                       <button type="button" className="btn btn-ghost" onClick={() => toggleSort('total')}>
