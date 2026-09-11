@@ -1,7 +1,46 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Dashboard, type LinkRow } from '../api'
 import { Avatar, Modal, PeriodFilter, PlatformFilter } from '../components'
+
+const SIDEBAR_W_KEY = 'biolinks-sidebar-width'
+const SIDEBAR_W_MIN = 180
+const SIDEBAR_W_MAX = 480
+const SIDEBAR_W_DEFAULT = 260
+
+function clampSidebarWidth(n: number): number {
+  return Math.min(SIDEBAR_W_MAX, Math.max(SIDEBAR_W_MIN, Math.round(n)))
+}
+
+function readSidebarWidth(): number {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_W_KEY)
+    if (raw == null) return SIDEBAR_W_DEFAULT
+    const n = Number(raw)
+    if (!Number.isFinite(n)) return SIDEBAR_W_DEFAULT
+    return clampSidebarWidth(n)
+  } catch {
+    return SIDEBAR_W_DEFAULT
+  }
+}
+
+function writeSidebarWidth(n: number) {
+  try {
+    localStorage.setItem(SIDEBAR_W_KEY, String(clampSidebarWidth(n)))
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function IconSidebarResize() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M8 9l-3 3 3 3" />
+      <path d="M16 9l3 3-3 3" />
+      <path d="M5 12h14" />
+    </svg>
+  )
+}
 
 function splitAccounts(display: string | null | undefined): string[] {
   return String(display || '')
@@ -76,6 +115,44 @@ export function LinksPage() {
   const [editLink, setEditLink] = useState<LinkRow | null>(null)
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({})
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
+  const sidebarWidthRef = useRef(sidebarWidth)
+  sidebarWidthRef.current = sidebarWidth
+
+  function onSidebarResizePointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = sidebarWidthRef.current
+    const btn = e.currentTarget
+    btn.setPointerCapture(e.pointerId)
+    const prevCursor = document.body.style.cursor
+    const prevSelect = document.body.style.userSelect
+    document.body.style.cursor = 'ew-resize'
+    document.body.style.userSelect = 'none'
+
+    const onMove = (ev: PointerEvent) => {
+      const next = clampSidebarWidth(startW + (ev.clientX - startX))
+      sidebarWidthRef.current = next
+      setSidebarWidth(next)
+    }
+    const onUp = () => {
+      btn.removeEventListener('pointermove', onMove)
+      btn.removeEventListener('pointerup', onUp)
+      btn.removeEventListener('pointercancel', onUp)
+      document.body.style.cursor = prevCursor
+      document.body.style.userSelect = prevSelect
+      writeSidebarWidth(sidebarWidthRef.current)
+    }
+    btn.addEventListener('pointermove', onMove)
+    btn.addEventListener('pointerup', onUp)
+    btn.addEventListener('pointercancel', onUp)
+  }
+
+  function resetSidebarWidth() {
+    setSidebarWidth(SIDEBAR_W_DEFAULT)
+    writeSidebarWidth(SIDEBAR_W_DEFAULT)
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -211,16 +288,30 @@ export function LinksPage() {
       {loading && !data ? <div className="loading">Загрузка…</div> : null}
 
       {data ? (
-        <div className="links-layout">
+        <div
+          className="links-layout"
+          style={{ '--sidebar-w': `${sidebarWidth}px` } as CSSProperties}
+        >
           <aside className="sidebar" aria-label="Фильтр по цели">
-            <input
-              className="input"
-              type="search"
-              placeholder="Поиск целей"
-              value={destSearch}
-              onChange={(e) => setDestSearch(e.target.value)}
-              style={{ marginBottom: '0.65rem' }}
-            />
+            <div className="sidebar-head">
+              <input
+                className="input"
+                type="search"
+                placeholder="Поиск целей"
+                value={destSearch}
+                onChange={(e) => setDestSearch(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon sidebar-resize"
+                title="Потяните, чтобы изменить ширину. Двойной клик — сброс."
+                aria-label="Изменить ширину сайдбара"
+                onPointerDown={onSidebarResizePointerDown}
+                onDoubleClick={resetSidebarWidth}
+              >
+                <IconSidebarResize />
+              </button>
+            </div>
             <nav className="stack sidebar-scroll" style={{ gap: '0.15rem', maxHeight: '70vh', overflow: 'auto' }}>
               {destinationItems.map((it) => {
                 const active =

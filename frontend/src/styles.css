@@ -624,7 +624,7 @@ textarea {
 
 .links-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-w, 260px) minmax(0, 1fr);
   gap: 1rem;
   margin-top: 1rem;
 }
@@ -637,6 +637,25 @@ textarea {
   align-self: start;
   position: sticky;
   top: calc(var(--header-h, 3.5rem) + 0.75rem);
+  min-width: 0;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+
+.sidebar-head .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-resize {
+  flex-shrink: 0;
+  cursor: ew-resize;
+  touch-action: none;
 }
 
 .sidebar-scroll {
@@ -763,6 +782,10 @@ textarea {
 @media (max-width: 900px) {
   .links-layout {
     grid-template-columns: 1fr;
+  }
+
+  .sidebar-resize {
+    display: none;
   }
 
   .charts-grid {
