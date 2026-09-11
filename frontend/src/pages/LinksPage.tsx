@@ -71,7 +71,6 @@ export function LinksPage() {
   const [destSearch, setDestSearch] = useState('')
 
   const [newOpen, setNewOpen] = useState(sp.get('new') === '1')
-  const [bulkOpen, setBulkOpen] = useState(false)
   const [destOpen, setDestOpen] = useState(false)
   const [actionsLink, setActionsLink] = useState<LinkRow | null>(null)
   const [editLink, setEditLink] = useState<LinkRow | null>(null)
@@ -173,9 +172,6 @@ export function LinksPage() {
         <div className="admin-actions">
           <button type="button" className="btn btn-primary" onClick={() => setNewOpen(true)}>
             + Создать ссылку
-          </button>
-          <button type="button" className="btn" onClick={() => setBulkOpen(true)}>
-            Массовое создание
           </button>
           <button
             type="button"
@@ -445,14 +441,6 @@ export function LinksPage() {
           }
         }}
       />
-      <BulkModal
-        open={bulkOpen}
-        onClose={() => setBulkOpen(false)}
-        onDone={() => {
-          setBulkOpen(false)
-          void load()
-        }}
-      />
       <BulkActionsModal
         open={destOpen}
         linkIds={selectedIds}
@@ -675,63 +663,6 @@ function NewLinkModal({
             Несколько аккаунтов — через запятую или с новой строки. Разные платформы разойдутся на
             отдельные ссылки
           </span>
-        </label>
-        <button className="btn btn-primary" type="submit" disabled={busy}>
-          Создать
-        </button>
-      </form>
-    </Modal>
-  )
-}
-
-function BulkModal({
-  open,
-  onClose,
-  onDone,
-}: {
-  open: boolean
-  onClose: () => void
-  onDone: () => void
-}) {
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    const fd = new FormData(e.currentTarget)
-    try {
-      await api('/admin/api/links/bulk', {
-        method: 'POST',
-        json: {
-          destination_url: fd.get('destination_url'),
-          labels: fd.get('labels'),
-        },
-      })
-      onDone()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Ошибка')
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Modal open={open} title="Массовое создание" onClose={onClose} wide>
-      <form className="stack" onSubmit={onSubmit}>
-        {error ? <div className="error-box">{error}</div> : null}
-        <label className="field-label">
-          Общая цель (URL)
-          <input className="input" name="destination_url" type="url" required />
-        </label>
-        <label className="field-label">
-          Аккаунты
-          <textarea
-            className="input textarea"
-            name="labels"
-            required
-            placeholder="По одному на строку или через запятую"
-          />
-          <span className="muted small">Каждый аккаунт — отдельная ссылка. Разделитель: новая строка или запятая</span>
         </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Создать
