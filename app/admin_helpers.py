@@ -94,15 +94,18 @@ def destination_site_icon_url(url: str) -> str | None:
     return destination_favicon_href(host)
 
 
-def destination_icons(url: str, *, platform_id: str | None = None) -> tuple[str | None, str | None]:
-    """(icon_url, platform_icon_url) для пункта сайдбара по цели."""
+def destination_icons(url: str, *, platform_id: str | None = None) -> tuple[str | None, str | None, list[str]]:
+    """(icon_url, platform_icon_url, client_fallbacks) для сайдбара и таблицы."""
+    from app.services.destination_favicon import destination_client_fallbacks
+
+    host = destination_host(url)
     icon = destination_site_icon_url(url)
     plat = detect_platform_from_text(url) or platform_id
     plat_icon = platform_favicon_url(plat)
-    # Известная платформа-цель: значок платформы + наш favicon как запасной путь на клиенте
-    if plat_icon and detect_platform_from_text(url):
-        return icon or plat_icon, plat_icon
-    return icon, plat_icon
+    fallbacks = destination_client_fallbacks(host or "")
+    if plat_icon and plat_icon not in fallbacks:
+        fallbacks.append(plat_icon)
+    return icon, plat_icon, fallbacks
 
 
 def account_label_ilike(term: str):
@@ -321,7 +324,7 @@ async def destination_link_filters(db: AsyncSession) -> list[dict]:
         n = int(cnt)
         total += n
         raw = str(url)
-        icon_url, platform_icon_url = destination_icons(
+        icon_url, platform_icon_url, icon_fallbacks = destination_icons(
             raw, platform_id=majority_platform.get(raw)
         )
         items.append(
@@ -331,6 +334,7 @@ async def destination_link_filters(db: AsyncSession) -> list[dict]:
                 "count": n,
                 "icon_url": icon_url,
                 "platform_icon_url": platform_icon_url,
+                "icon_fallbacks": icon_fallbacks,
             }
         )
     return [
@@ -340,6 +344,7 @@ async def destination_link_filters(db: AsyncSession) -> list[dict]:
             "count": total,
             "icon_url": None,
             "platform_icon_url": None,
+            "icon_fallbacks": [],
         },
         *items,
     ]

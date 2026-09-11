@@ -136,22 +136,30 @@ export function BarChart({ items, limit = 8 }: { items: { label: string; count: 
 export function Avatar({
   url,
   fallbackUrl,
+  fallbackUrls,
   name,
   size = 'sm',
 }: {
   url?: string | null
   fallbackUrl?: string | null
+  fallbackUrls?: (string | null | undefined)[]
   name: string
   size?: 'sm' | 'lg'
 }) {
   const letter = (name || '?').slice(0, 1).toUpperCase()
-  const primary = url || null
-  const secondary = fallbackUrl && fallbackUrl !== primary ? fallbackUrl : null
-  const [src, setSrc] = useState<string | null>(primary || secondary)
+  const chain = (() => {
+    const xs = [url, fallbackUrl, ...(fallbackUrls || [])].filter(
+      (x): x is string => typeof x === 'string' && !!x.trim(),
+    )
+    return [...new Set(xs)]
+  })()
+  const [idx, setIdx] = useState(0)
 
   useEffect(() => {
-    setSrc(primary || secondary)
-  }, [primary, secondary])
+    setIdx(0)
+  }, [chain.join('\0')])
+
+  const src = chain[idx] ?? null
 
   if (src) {
     return (
@@ -160,13 +168,8 @@ export function Avatar({
         src={src}
         alt=""
         loading="lazy"
-        onError={() => {
-          if (primary && src === primary && secondary) {
-            setSrc(secondary)
-          } else {
-            setSrc(null)
-          }
-        }}
+        referrerPolicy="no-referrer"
+        onError={() => setIdx((i) => i + 1)}
       />
     )
   }

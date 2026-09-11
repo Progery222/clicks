@@ -202,6 +202,7 @@ export function LinksPage() {
                       <Avatar
                         url={it.icon_url}
                         fallbackUrl={it.platform_icon_url}
+                        fallbackUrls={it.icon_fallbacks}
                         name={it.name}
                       />
                     )}
@@ -334,6 +335,7 @@ export function LinksPage() {
                           <Avatar
                             url={row.destination_icon_url}
                             fallbackUrl={row.destination_icon_fallback_url}
+                            fallbackUrls={row.destination_icon_fallbacks}
                             name={row.destination_url}
                           />
                           <a

@@ -125,7 +125,7 @@ async def destination_favicon(
 def _serialize_link(link: Link) -> dict[str, Any]:
     account_display = account_label_display(link.label) or link.label or link.slug
     display_name = (link.title or "").strip() or account_display
-    dest_icon, dest_plat_icon = destination_icons(link.destination_url)
+    dest_icon, dest_plat_icon, dest_fallbacks = destination_icons(link.destination_url)
     return {
         "id": str(link.id),
         "slug": link.slug,
@@ -138,6 +138,7 @@ def _serialize_link(link: Link) -> dict[str, Any]:
         "platform_icon_url": platform_favicon_url(link.platform),
         "destination_icon_url": dest_icon or destination_site_icon_url(link.destination_url),
         "destination_icon_fallback_url": dest_plat_icon,
+        "destination_icon_fallbacks": dest_fallbacks,
         "profile_id": str(link.profile_id) if link.profile_id else None,
         "profile": (
             {"id": str(link.profile.id), "name": link.profile.name, "color": link.profile.color}

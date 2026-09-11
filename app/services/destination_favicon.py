@@ -147,24 +147,32 @@ async def resolve_destination_favicon(host: str) -> CachedFavicon | None:
         return hit
 
     origins = [f"https://{host}/", f"https://www.{host}/"]
+    # PNG/SVG раньше .ico — браузеры стабильнее показывают растр
     static_paths = (
-        "favicon.ico",
-        "favicon.png",
         "apple-touch-icon.png",
         "apple-touch-icon-precomposed.png",
+        "favicon.png",
+        "favicon.svg",
+        "favicon.ico",
     )
     external = [
         f"https://icons.duckduckgo.com/ip3/{host}.ico",
         f"https://icon.horse/icon/{host}",
     ]
+    preferred = ("image/png", "image/svg+xml", "image/jpeg", "image/webp")
 
     async with create_safe_http_client(timeout=10.0) as client:
+        best_ico: tuple[bytes, str] | None = None
+
+        def _keep(got: tuple[bytes, str]) -> CachedFavicon | None:
+            nonlocal best_ico
+            if got[1] in preferred:
+                return _put_cached(host, got[0], got[1])
+            if best_ico is None:
+                best_ico = got
+            return None
+
         for origin in origins:
-            for path in static_paths:
-                got = await _try_get(client, urljoin(origin, path))
-                if got:
-                    return _put_cached(host, got[0], got[1])
-            # HTML <link rel=icon>
             try:
                 page = await safe_get(
                     client,
@@ -176,9 +184,21 @@ async def resolve_destination_favicon(host: str) -> CachedFavicon | None:
                     for href in _icon_hrefs_from_html(page.text[:200_000], str(page.url)):
                         got = await _try_get(client, href)
                         if got:
-                            return _put_cached(host, got[0], got[1])
+                            done = _keep(got)
+                            if done:
+                                return done
             except Exception as exc:
                 log.debug("favicon html fetch failed for %s: %s", host, exc)
+
+            for path in static_paths:
+                got = await _try_get(client, urljoin(origin, path))
+                if got:
+                    done = _keep(got)
+                    if done:
+                        return done
+
+        if best_ico:
+            return _put_cached(host, best_ico[0], best_ico[1])
 
         for url in external:
             got = await _try_get(client, url)
@@ -192,3 +212,14 @@ def destination_favicon_href(host: str) -> str:
     from urllib.parse import quote
 
     return f"/admin/api/destination-favicon?host={quote(host)}"
+
+
+def destination_client_fallbacks(host: str) -> list[str]:
+    """Запасные URL для <img onError>, если прокси не отдал картинку."""
+    h = (host or "").strip().lower().removeprefix("www.")
+    if not h:
+        return []
+    return [
+        f"https://icons.duckduckgo.com/ip3/{h}.ico",
+        f"https://icon.horse/icon/{h}",
+    ]
