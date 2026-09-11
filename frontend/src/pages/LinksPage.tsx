@@ -3,6 +3,58 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Dashboard, type LinkRow } from '../api'
 import { Avatar, Modal } from '../components'
 
+function splitAccounts(display: string | null | undefined): string[] {
+  return String(display || '')
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function AccountCell({
+  display,
+  platformIconUrl,
+  platformLabel,
+  expanded,
+  onToggle,
+}: {
+  display: string
+  platformIconUrl?: string | null
+  platformLabel?: string
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const accounts = splitAccounts(display)
+  if (!accounts.length) return <span className="muted">—</span>
+  const rest = accounts.length - 1
+  const visible = expanded || rest <= 0 ? accounts : [accounts[0]]
+  return (
+    <span className="row" style={{ gap: '0.45rem', alignItems: 'flex-start' }}>
+      <Avatar url={platformIconUrl} name={platformLabel || accounts[0]} />
+      <span style={{ whiteSpace: 'pre-line' }}>
+        {visible.join('\n')}
+        {rest > 0 ? (
+          <>
+            {' '}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ padding: '0 0.25rem', minHeight: 0, fontWeight: 600 }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggle()
+              }}
+              aria-expanded={expanded}
+              title={expanded ? 'Свернуть' : `Показать ещё ${rest}`}
+            >
+              {expanded ? 'свернуть' : `+${rest}`}
+            </button>
+          </>
+        ) : null}
+      </span>
+    </span>
+  )
+}
+
 export function LinksPage() {
   const [sp, setSp] = useSearchParams()
   const nav = useNavigate()
@@ -23,6 +75,7 @@ export function LinksPage() {
   const [destOpen, setDestOpen] = useState(false)
   const [actionsLink, setActionsLink] = useState<LinkRow | null>(null)
   const [editLink, setEditLink] = useState<LinkRow | null>(null)
+  const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -252,14 +305,19 @@ export function LinksPage() {
                   {data.links.map((row) => (
                     <tr key={row.id} onClick={() => nav(`/admin/links/${row.id}/stats`)}>
                       <td>{row.title?.trim() || '—'}</td>
-                      <td>
-                        <span className="row" style={{ gap: '0.45rem', alignItems: 'flex-start' }}>
-                          <Avatar
-                            url={row.platform_icon_url}
-                            name={row.platform_label || row.account_display}
-                          />
-                          <span style={{ whiteSpace: 'pre-line' }}>{row.account_display}</span>
-                        </span>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <AccountCell
+                          display={row.account_display}
+                          platformIconUrl={row.platform_icon_url}
+                          platformLabel={row.platform_label}
+                          expanded={!!expandedAccounts[row.id]}
+                          onToggle={() =>
+                            setExpandedAccounts((prev) => ({
+                              ...prev,
+                              [row.id]: !prev[row.id],
+                            }))
+                          }
+                        />
                       </td>
                       <td
                         className="muted small"
