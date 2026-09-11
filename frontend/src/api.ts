@@ -139,6 +139,7 @@ export type Indicators = {
   period_uniques: number
   profile_filters: { id: string; name: string; color: string | null; count: number }[]
   platform_filters: { id: string; label: string; color: string | null }[]
+  platform_stats: { platform: string; label: string; color: string; clicks: number; uniques: number }[]
   charts: {
     os: ChartItem[]
     devices: ChartItem[]

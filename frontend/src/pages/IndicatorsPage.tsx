@@ -105,6 +105,38 @@ export function IndicatorsPage() {
               <span className="kpi-card__lbl">уникальных</span>
             </div>
           </div>
+
+          {data.platform_stats?.length ? (
+            <>
+              <h2 className="section-title">Платформы за период</h2>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Платформа</th>
+                      <th className="num">Клики</th>
+                      <th className="num">Уник.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.platform_stats.map((ps) => (
+                      <tr key={ps.platform} style={{ cursor: 'default' }}>
+                        <td>
+                          <span className="row" style={{ gap: '0.4rem' }}>
+                            <span className="pill__dot" style={{ background: ps.color }} />
+                            {ps.label}
+                          </span>
+                        </td>
+                        <td className="num">{ps.clicks}</td>
+                        <td className="num">{ps.uniques}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+
           <div className="charts-grid">
             <div className="card">
               <h2 className="section-title" style={{ marginTop: 0 }}>

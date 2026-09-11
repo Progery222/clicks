@@ -691,6 +691,21 @@ async def indicators_json(
         "custom": f"{period_from} — {period_to}",
     }.get(active, period_from)
 
+    plat_by_id = {p["id"]: p for p in PLATFORMS}
+    platform_stats = []
+    for row in plat_stats_raw:
+        pid = row["platform"]
+        meta = plat_by_id.get(pid)
+        platform_stats.append(
+            {
+                "platform": pid,
+                "label": meta["label"] if meta else ("Без платформы" if pid == "none" else pid),
+                "color": meta["color"] if meta else "#525a70",
+                "clicks": row["clicks"],
+                "uniques": row["uniques"],
+            }
+        )
+
     return JSONResponse(
         {
             "filter_profile": profile,
@@ -703,6 +718,7 @@ async def indicators_json(
             "period_uniques": period_uniques,
             "profile_filters": profile_filters,
             "platform_filters": platform_filters,
+            "platform_stats": platform_stats,
             "charts": {
                 "os": bar_chart_items(os_rows),
                 "devices": bar_chart_items(device_rows),
