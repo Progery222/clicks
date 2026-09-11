@@ -304,7 +304,7 @@ textarea {
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--surface-2);
-  text-align: left;
+  text-align: center;
 }
 
 .kpi-card--accent {
