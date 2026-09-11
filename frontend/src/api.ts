@@ -74,6 +74,8 @@ export type LinkRow = {
   platform: string | null
   platform_label: string
   platform_color: string
+  platform_icon_url: string | null
+  destination_icon_url: string | null
   profile_id: string | null
   profile: { id: string; name: string; color: string } | null
   account_avatar_url: string | null

@@ -233,7 +233,6 @@ export function LinksPage() {
                 <thead>
                   <tr>
                     <th>Название</th>
-                    <th>Платф.</th>
                     <th>С какого аккаунта(ов)</th>
                     <th>Цель</th>
                     <th className="num">
@@ -254,25 +253,18 @@ export function LinksPage() {
                     <tr key={row.id} onClick={() => nav(`/admin/links/${row.id}/stats`)}>
                       <td>{row.title?.trim() || '—'}</td>
                       <td>
-                        {row.platform ? (
-                          <span className="row" style={{ gap: '0.35rem' }}>
-                            <span className="pill__dot" style={{ background: row.platform_color }} />
-                            {row.platform_label}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td>
                         <span className="row" style={{ gap: '0.45rem', alignItems: 'flex-start' }}>
-                          <Avatar url={row.account_avatar_url} name={row.account_display} />
+                          <Avatar
+                            url={row.platform_icon_url}
+                            name={row.platform_label || row.account_display}
+                          />
                           <span style={{ whiteSpace: 'pre-line' }}>{row.account_display}</span>
                         </span>
                       </td>
                       <td
                         className="muted small"
                         style={{
-                          maxWidth: '16rem',
+                          maxWidth: '18rem',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
@@ -280,9 +272,21 @@ export function LinksPage() {
                         title={row.destination_url}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <a href={row.destination_url} target="_blank" rel="noreferrer">
-                          {row.destination_url}
-                        </a>
+                        <span className="row" style={{ gap: '0.45rem', minWidth: 0 }}>
+                          <Avatar
+                            url={row.account_avatar_url || row.destination_icon_url}
+                            fallbackUrl={row.platform_icon_url}
+                            name={row.destination_url}
+                          />
+                          <a
+                            href={row.destination_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {row.destination_url}
+                          </a>
+                        </span>
                       </td>
                       <td className="num">{row.total}</td>
                       <td className="num">{row.today}</td>
@@ -300,7 +304,7 @@ export function LinksPage() {
                   ))}
                   {!data.links.length ? (
                     <tr style={{ cursor: 'default' }}>
-                      <td colSpan={7} className="muted">
+                      <td colSpan={6} className="muted">
                         Нет ссылок по фильтру
                       </td>
                     </tr>

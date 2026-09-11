@@ -18,6 +18,7 @@ from app.admin_helpers import (
     apply_link_filters,
     cached_sidebar_link_counts,
     destination_link_filters,
+    destination_site_icon_url,
     earliest_link_created_at,
     load_profiles,
     parse_profile_id,
@@ -27,7 +28,7 @@ from app.config import get_settings
 from app.csrf import get_or_create_csrf_token, rotate_csrf_token
 from app.database import get_db
 from app.models import Click, Link, Profile
-from app.platforms import PLATFORMS, PROFILE_COLORS, platform_color, platform_label
+from app.platforms import PLATFORMS, PROFILE_COLORS, platform_color, platform_favicon_url, platform_label
 from app.security import verify_env_password
 from app.services.account_avatar import bootstrap_link_avatar
 from app.services.admin_avatar import admin_avatar_href
@@ -98,6 +99,8 @@ def _serialize_link(link: Link) -> dict[str, Any]:
         "platform": link.platform,
         "platform_label": platform_label(link.platform),
         "platform_color": platform_color(link.platform),
+        "platform_icon_url": platform_favicon_url(link.platform),
+        "destination_icon_url": destination_site_icon_url(link.destination_url),
         "profile_id": str(link.profile_id) if link.profile_id else None,
         "profile": (
             {"id": str(link.profile.id), "name": link.profile.name, "color": link.profile.color}
