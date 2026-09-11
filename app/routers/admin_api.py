@@ -12,7 +12,6 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.admin_dashboard import load_dashboard_page_data
 from app.admin_helpers import (
@@ -22,15 +21,13 @@ from app.admin_helpers import (
     destination_link_filters,
     destination_site_icon_url,
     earliest_link_created_at,
-    load_profiles,
-    parse_profile_id,
     resolve_stats_period,
 )
 from app.config import get_settings
 from app.csrf import get_or_create_csrf_token, rotate_csrf_token
 from app.database import get_db
-from app.models import Click, Link, Profile
-from app.platforms import PLATFORMS, PROFILE_COLORS, platform_color, platform_favicon_url, platform_label
+from app.models import Click, Link
+from app.platforms import PLATFORMS, platform_color, platform_favicon_url, platform_label
 from app.security import verify_env_password
 from app.services.account_avatar import bootstrap_link_avatar
 from app.services.admin_avatar import admin_avatar_href
@@ -47,7 +44,6 @@ from app.services.label_match import account_label_display
 from app.services.links_meta import (
     apply_link_accounts,
     apply_link_label,
-    apply_link_profile,
     apply_link_title,
     group_accounts_by_platform,
 )
@@ -55,7 +51,6 @@ from app.services.stats import (
     aggregate_clicks_for_links,
     bar_chart_items,
     platform_click_stats,
-    profile_click_stats,
     stats_by_day,
     stats_summary,
     top_countries,
@@ -68,7 +63,6 @@ from app.services.destination_favicon import resolve_destination_favicon
 from app.services.stats_cache import invalidate_dashboard_counts_cache
 from app.stats_range import DASHBOARD_DEFAULT_PRESET, active_preset, form_period_dates, stats_range
 from app.url_validation import is_valid_destination_url
-from app.utils.bulk_labels import MAX_BULK_LABELS, parse_label_lines
 from app.utils.csv_import import MAX_IMPORT_BYTES, parse_links_import_csv
 from app.utils.slug import random_slug
 
@@ -139,12 +133,6 @@ def _serialize_link(link: Link) -> dict[str, Any]:
         "destination_icon_url": dest_icon or destination_site_icon_url(link.destination_url),
         "destination_icon_fallback_url": dest_plat_icon,
         "destination_icon_fallbacks": dest_fallbacks,
-        "profile_id": str(link.profile_id) if link.profile_id else None,
-        "profile": (
-            {"id": str(link.profile.id), "name": link.profile.name, "color": link.profile.color}
-            if getattr(link, "profile", None)
-            else None
-        ),
         "account_avatar_url": admin_avatar_href(link),
         "account_display": account_display,
         "display_name": display_name,
@@ -168,9 +156,6 @@ def _serialize_link_row(row: dict) -> dict[str, Any]:
     }
 
 
-def _serialize_profile(p: Profile) -> dict[str, Any]:
-    return {"id": str(p.id), "name": p.name, "color": p.color}
-
 
 class LoginBody(BaseModel):
     password: str
@@ -180,20 +165,12 @@ class LinkCreateBody(BaseModel):
     destination_url: str
     title: str | None = None
     label: str | None = None
-    profile_id: str | None = ""
-
-
-class LinkBulkBody(BaseModel):
-    destination_url: str
-    labels: str
-    profile_id: str | None = ""
 
 
 class LinkUpdateBody(BaseModel):
     destination_url: str | None = None
     title: str | None = None
     label: str | None = None
-    profile_id: str | None = Field(default=None)
 
 
 class BulkDestBody(BaseModel):
@@ -203,16 +180,6 @@ class BulkDestBody(BaseModel):
 
 class BulkIdsBody(BaseModel):
     link_ids: list[str] = Field(default_factory=list)
-
-
-class ProfileCreateBody(BaseModel):
-    name: str
-    color: str | None = None
-
-
-class ProfileUpdateBody(BaseModel):
-    name: str | None = None
-    color: str | None = None
 
 
 # ——— Auth ———
@@ -306,23 +273,8 @@ async def dashboard_json(
         log.exception("dashboard_json failed")
         raise HTTPException(status_code=500, detail="Dashboard load failed") from None
 
-    profiles = await load_profiles(db)
-    prof_counts, plat_counts = await cached_sidebar_link_counts(db)
+    _, plat_counts = await cached_sidebar_link_counts(db)
     destination_filters = await destination_link_filters(db)
-
-    profile_filters = [
-        {"id": "all", "name": "Все профили", "color": None, "count": prof_counts.get("all", 0)},
-        {"id": "none", "name": "Без профиля", "color": None, "count": prof_counts.get("none", 0)},
-    ]
-    for p in profiles:
-        profile_filters.append(
-            {
-                "id": str(p.id),
-                "name": p.name,
-                "color": p.color,
-                "count": prof_counts.get(str(p.id), 0),
-            }
-        )
 
     platform_filters = [
         {"id": "all", "label": "Все", "color": None, "count": plat_counts.get("all", 0)},
@@ -347,12 +299,9 @@ async def dashboard_json(
     return JSONResponse(
         {
             "links": [_serialize_link_row(r) for r in dash["link_rows"]],
-            "profiles": [_serialize_profile(p) for p in profiles],
-            "profile_filters": profile_filters,
             "destination_filters": destination_filters,
             "platform_filters": platform_filters,
             "platforms": PLATFORMS,
-            "filter_profile": dash["filter_profile"],
             "filter_platform": dash["filter_platform"],
             "filter_account": dash["filter_account"],
             "filter_destination": dash["filter_destination"],
@@ -384,7 +333,6 @@ async def create_link(
     if not _valid_url(body.destination_url):
         raise HTTPException(status_code=400, detail="URL должен начинаться с http:// или https://")
     dest_url = body.destination_url.strip()
-    pid = parse_profile_id(body.profile_id or "")
     groups = group_accounts_by_platform(body.label)
     # Без аккаунтов или одна платформа — одна ссылка; разные платформы — по ссылке на группу
     if not groups:
@@ -396,14 +344,11 @@ async def create_link(
         link = Link(slug=slug, destination_url=dest_url)
         apply_link_title(link, body.title)
         apply_link_accounts(link, accounts)
-        apply_link_profile(link, pid)
         db.add(link)
         created.append(link)
     for link in created:
         await bootstrap_link_avatar(db, link)
     await db.commit()
-    for link in created:
-        await db.refresh(link, attribute_names=["profile"])
     invalidate_dashboard_counts_cache()
     return JSONResponse(
         {
@@ -413,37 +358,6 @@ async def create_link(
         },
         status_code=201,
     )
-
-
-@router.post("/links/bulk")
-async def bulk_create_links(
-    request: Request,
-    body: LinkBulkBody,
-    db: AsyncSession = Depends(get_db),
-) -> JSONResponse:
-    _require_admin(request)
-    if not _valid_url(body.destination_url):
-        raise HTTPException(status_code=400, detail="URL должен начинаться с http:// или https://")
-    label_list = parse_label_lines(body.labels)
-    if not label_list:
-        raise HTTPException(status_code=400, detail="Добавьте хотя бы один аккаунт")
-    if len(label_list) > MAX_BULK_LABELS:
-        raise HTTPException(status_code=400, detail=f"Не больше {MAX_BULK_LABELS} аккаунтов")
-    pid = parse_profile_id(body.profile_id or "")
-    dest_url = body.destination_url.strip()
-    new_links: list[Link] = []
-    for label in label_list:
-        slug = await _unique_slug(db)
-        link = Link(slug=slug, destination_url=dest_url)
-        apply_link_label(link, label)
-        apply_link_profile(link, pid)
-        db.add(link)
-        new_links.append(link)
-    for link in new_links:
-        await bootstrap_link_avatar(db, link, allow_http=False)
-    await db.commit()
-    invalidate_dashboard_counts_cache()
-    return JSONResponse({"created": len(label_list)})
 
 
 @router.post("/links/bulk-destination")
@@ -500,7 +414,6 @@ async def import_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
-    profile_id: str = "",
 ) -> JSONResponse:
     _require_admin(request)
     raw = await file.read()
@@ -511,7 +424,6 @@ async def import_csv(
         rows = parse_links_import_csv(text)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    pid = parse_profile_id(profile_id)
     created = 0
     for row in rows:
         if not _valid_url(row.destination_url):
@@ -519,7 +431,6 @@ async def import_csv(
         slug = await _unique_slug(db)
         link = Link(slug=slug, destination_url=row.destination_url.strip())
         apply_link_label(link, row.label)
-        apply_link_profile(link, pid)
         db.add(link)
         await bootstrap_link_avatar(db, link, allow_http=False)
         created += 1
@@ -535,9 +446,7 @@ async def get_link(
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     _require_admin(request)
-    link = (
-        await db.execute(select(Link).options(selectinload(Link.profile)).where(Link.id == link_id))
-    ).scalar_one_or_none()
+    link = await db.get(Link, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="Not found")
     return JSONResponse({"link": _serialize_link(link)})
@@ -551,9 +460,7 @@ async def update_link(
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     _require_admin(request)
-    link = (
-        await db.execute(select(Link).options(selectinload(Link.profile)).where(Link.id == link_id))
-    ).scalar_one_or_none()
+    link = await db.get(Link, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="Not found")
     if body.destination_url is not None:
@@ -571,23 +478,16 @@ async def update_link(
             apply_link_accounts(link, groups[0][1])
             dest_url = link.destination_url
             title = link.title
-            pid = link.profile_id
             for _, accounts in groups[1:]:
                 slug = await _unique_slug(db)
                 extra = Link(slug=slug, destination_url=dest_url)
                 apply_link_title(extra, title)
                 apply_link_accounts(extra, accounts)
-                apply_link_profile(extra, pid)
                 db.add(extra)
                 extra_links.append(extra)
             for extra in extra_links:
                 await bootstrap_link_avatar(db, extra)
-    if body.profile_id is not None:
-        apply_link_profile(link, parse_profile_id(body.profile_id))
     await db.commit()
-    await db.refresh(link, attribute_names=["profile"])
-    for extra in extra_links:
-        await db.refresh(extra, attribute_names=["profile"])
     invalidate_link_avatar_cache(link.id)
     invalidate_dashboard_counts_cache()
     return JSONResponse(
@@ -642,9 +542,7 @@ async def link_stats_json(
     preset: str | None = Query(None),
 ) -> JSONResponse:
     _require_admin(request)
-    link = (
-        await db.execute(select(Link).options(selectinload(Link.profile)).where(Link.id == link_id))
-    ).scalar_one_or_none()
+    link = await db.get(Link, link_id)
     if not link:
         raise HTTPException(status_code=404, detail="Not found")
     if (link.account_avatar_mode or "auto") == "auto" and not link.account_avatar_url:
@@ -683,79 +581,6 @@ async def link_stats_json(
     )
 
 
-# ——— Profiles ———
-
-
-@router.get("/profiles")
-async def list_profiles(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
-    _require_admin(request)
-    profiles = await load_profiles(db)
-    counts, _ = await cached_sidebar_link_counts(db)
-    items = []
-    for p in profiles:
-        items.append({**_serialize_profile(p), "count": counts.get(str(p.id), 0)})
-    return JSONResponse({"profiles": items, "palette": PROFILE_COLORS})
-
-
-@router.post("/profiles")
-async def create_profile(
-    request: Request,
-    body: ProfileCreateBody,
-    db: AsyncSession = Depends(get_db),
-) -> JSONResponse:
-    _require_admin(request)
-    name = (body.name or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Имя обязательно")
-    color = (body.color or PROFILE_COLORS[0]).strip()
-    p = Profile(name=name, color=color)
-    db.add(p)
-    await db.commit()
-    await db.refresh(p)
-    invalidate_dashboard_counts_cache()
-    return JSONResponse({"profile": _serialize_profile(p)}, status_code=201)
-
-
-@router.patch("/profiles/{profile_id}")
-async def update_profile(
-    request: Request,
-    profile_id: uuid.UUID,
-    body: ProfileUpdateBody,
-    db: AsyncSession = Depends(get_db),
-) -> JSONResponse:
-    _require_admin(request)
-    p = await db.get(Profile, profile_id)
-    if not p:
-        raise HTTPException(status_code=404, detail="Not found")
-    if body.name is not None:
-        name = body.name.strip()
-        if not name:
-            raise HTTPException(status_code=400, detail="Имя обязательно")
-        p.name = name
-    if body.color is not None:
-        p.color = body.color.strip()
-    await db.commit()
-    invalidate_dashboard_counts_cache()
-    return JSONResponse({"profile": _serialize_profile(p)})
-
-
-@router.delete("/profiles/{profile_id}")
-async def delete_profile(
-    request: Request,
-    profile_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-) -> JSONResponse:
-    _require_admin(request)
-    p = await db.get(Profile, profile_id)
-    if not p:
-        raise HTTPException(status_code=404, detail="Not found")
-    await db.execute(update(Link).where(Link.profile_id == profile_id).values(profile_id=None))
-    await db.delete(p)
-    await db.commit()
-    invalidate_dashboard_counts_cache()
-    return JSONResponse({"ok": True})
-
-
 # ——— Indicators ———
 
 
@@ -780,24 +605,7 @@ async def indicators_json(
     period_total, period_uniques = await aggregate_clicks_for_links(db, link_ids, start, end)
     os_rows = await top_os_for_links(db, link_ids, start, end)
     device_rows = await top_device_types_for_links(db, link_ids, start, end)
-    profile_stats = await profile_click_stats(db, link_ids, start, end)
     plat_stats_raw = await platform_click_stats(db, link_ids, start, end)
-
-    profiles = await load_profiles(db)
-    prof_counts, _ = await cached_sidebar_link_counts(db)
-    profile_filters = [
-        {"id": "all", "name": "Все профили", "color": None, "count": prof_counts.get("all", 0)},
-        {"id": "none", "name": "Без профиля", "color": None, "count": prof_counts.get("none", 0)},
-    ]
-    for p in profiles:
-        profile_filters.append(
-            {
-                "id": str(p.id),
-                "name": p.name,
-                "color": p.color,
-                "count": prof_counts.get(str(p.id), 0),
-            }
-        )
 
     platform_filters = [{"id": "all", "label": "Все", "color": None}]
     for p in PLATFORMS:
@@ -828,7 +636,6 @@ async def indicators_json(
 
     return JSONResponse(
         {
-            "filter_profile": profile,
             "filter_platform": platform,
             "active_preset": active,
             "period_from": period_from,
@@ -836,16 +643,11 @@ async def indicators_json(
             "period_label": period_label,
             "period_total": period_total,
             "period_uniques": period_uniques,
-            "profile_filters": profile_filters,
             "platform_filters": platform_filters,
             "platform_stats": platform_stats,
             "charts": {
                 "os": bar_chart_items(os_rows),
                 "devices": bar_chart_items(device_rows),
-                "profiles": bar_chart_items(
-                    [(p["name"], p["clicks"]) for p in profile_stats],
-                    colors={p["name"]: p["color"] for p in profile_stats},
-                ),
                 "platforms": bar_chart_items(
                     [
                         (
@@ -874,30 +676,3 @@ async def indicators_json(
     )
 
 
-@router.get("/links-picker")
-async def links_picker(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    q: str = Query(""),
-) -> JSONResponse:
-    _require_admin(request)
-    term = (q or "").strip().lower()
-    stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc()).limit(80)
-    links = list((await db.execute(stmt)).scalars().all())
-    items = []
-    for link in links:
-        title = (link.title or "").lower()
-        label = (link.label or link.slug or "").lower()
-        if term and term not in label and term not in title and term not in link.slug.lower():
-            continue
-        display = (link.title or "").strip() or link.label or link.slug
-        items.append(
-            {
-                "id": str(link.id),
-                "slug": link.slug,
-                "title": link.title,
-                "label": link.label,
-                "display": display,
-            }
-        )
-    return JSONResponse({"items": items[:40]})

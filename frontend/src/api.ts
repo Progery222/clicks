@@ -63,8 +63,6 @@ export type Me = {
   block_message?: string | null
 }
 
-export type Profile = { id: string; name: string; color: string; count?: number }
-
 export type LinkRow = {
   id: string
   slug: string
@@ -78,8 +76,6 @@ export type LinkRow = {
   destination_icon_url: string | null
   destination_icon_fallback_url?: string | null
   destination_icon_fallbacks?: string[]
-  profile_id: string | null
-  profile: { id: string; name: string; color: string } | null
   account_avatar_url: string | null
   account_display: string
   display_name: string
@@ -95,8 +91,6 @@ export type ChartItem = { label: string; count: number; pct: number; color?: str
 
 export type Dashboard = {
   links: LinkRow[]
-  profiles: Profile[]
-  profile_filters: { id: string; name: string; color: string | null; count: number }[]
   destination_filters: {
     id: string
     name: string
@@ -106,7 +100,6 @@ export type Dashboard = {
     icon_fallbacks?: string[]
   }[]
   platform_filters: { id: string; label: string; color: string | null; count: number }[]
-  filter_profile: string
   filter_platform: string
   filter_account: string
   filter_destination: string
@@ -142,7 +135,6 @@ export type LinkStats = {
 }
 
 export type Indicators = {
-  filter_profile: string
   filter_platform: string
   active_preset: string
   period_from: string
@@ -150,13 +142,11 @@ export type Indicators = {
   period_label: string
   period_total: number
   period_uniques: number
-  profile_filters: { id: string; name: string; color: string | null; count: number }[]
   platform_filters: { id: string; label: string; color: string | null }[]
   platform_stats: { platform: string; label: string; color: string; clicks: number; uniques: number }[]
   charts: {
     os: ChartItem[]
     devices: ChartItem[]
-    profiles: ChartItem[]
     platforms: ChartItem[]
   }
 }

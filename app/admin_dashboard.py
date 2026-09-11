@@ -7,7 +7,6 @@ from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.services.label_match import account_label_display
 from app.admin_helpers import (
@@ -153,7 +152,7 @@ async def load_dashboard_page_data(
     dest_term = (destination or "").strip()
     if dest_term == "all":
         dest_term = ""
-    stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
+    stmt = select(Link).order_by(Link.created_at.desc())
     stmt = apply_link_filters(
         stmt,
         profile=profile,

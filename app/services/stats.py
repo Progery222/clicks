@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Click, Link, Profile
+from app.models import Click, Link
 from app.services.ua_parse import parse_device_type, parse_os
 
 
@@ -170,47 +170,6 @@ async def top_device_types_for_links(
         session, start, end, parse_device_type, link_ids=link_ids, limit=limit
     )
 
-
-async def profile_click_stats(
-    session: AsyncSession,
-    link_ids: list[uuid.UUID],
-    start: datetime,
-    end: datetime,
-) -> list[dict]:
-    if not link_ids:
-        return []
-    name = Profile.name.label("profile_name")
-    color = Profile.color.label("profile_color")
-    stmt = (
-        select(
-            name,
-            color,
-            func.count().label("clicks"),
-            func.count(func.distinct(Click.dedupe_key)).label("uniques"),
-        )
-        .select_from(Click)
-        .join(Link, Click.link_id == Link.id)
-        .outerjoin(Profile, Link.profile_id == Profile.id)
-        .where(
-            Click.link_id.in_(link_ids),
-            Click.created_at >= start,
-            Click.created_at < end,
-        )
-        .group_by(Profile.id, Profile.name, Profile.color)
-        .order_by(func.count().desc())
-    )
-    rows = (await session.execute(stmt)).all()
-    out: list[dict] = []
-    for r in rows:
-        out.append(
-            {
-                "name": r.profile_name or "Без профиля",
-                "color": r.profile_color or "#525a70",
-                "clicks": int(r.clicks),
-                "uniques": int(r.uniques),
-            }
-        )
-    return out
 
 
 def bar_chart_items(rows: list[tuple[str, int]], *, colors: dict[str, str] | None = None) -> list[dict]:

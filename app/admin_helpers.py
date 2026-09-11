@@ -9,7 +9,7 @@ from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Click, Link, Profile
+from app.models import Click, Link
 from app.platforms import detect_platform_from_text, platform_favicon_url
 from app.stats_range import dashboard_stats_range, parse_range
 
@@ -198,11 +198,6 @@ def apply_link_filters(
     return stmt
 
 
-async def load_profiles(db: AsyncSession) -> list[Profile]:
-    res = await db.execute(select(Profile).order_by(Profile.name))
-    return list(res.scalars().all())
-
-
 async def earliest_link_created_at(db: AsyncSession):
     from app.services.stats_cache import set_cached_earliest_link, try_get_cached_earliest_link
 
@@ -218,30 +213,15 @@ async def earliest_link_created_at(db: AsyncSession):
 async def cached_sidebar_link_counts(
     db: AsyncSession,
 ) -> tuple[dict[str, int], dict[str, int]]:
+    """Кэш счётчиков сайдбара. Первый элемент — заглушка (профили убраны из UI)."""
     from app.services.stats_cache import get_cached_sidebar_counts, set_cached_sidebar_counts
 
     cached = get_cached_sidebar_counts()
     if cached is not None:
         return cached
-    prof = await profile_link_counts(db)
     plat = await platform_link_counts(db)
-    set_cached_sidebar_counts(prof, plat)
-    return prof, plat
-
-
-async def profile_link_counts(db: AsyncSession) -> dict[str, int]:
-    rows = (
-        await db.execute(select(Link.profile_id, func.count()).group_by(Link.profile_id))
-    ).all()
-    counts: dict[str, int] = {"none": 0}
-    total = 0
-    for pid, cnt in rows:
-        n = int(cnt)
-        total += n
-        key = "none" if pid is None else str(pid)
-        counts[key] = n
-    counts["all"] = total
-    return counts
+    set_cached_sidebar_counts({}, plat)
+    return {}, plat
 
 
 def resolve_stats_period(

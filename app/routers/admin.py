@@ -1,41 +1,30 @@
-import json
 import logging
 import uuid
 from collections.abc import Iterator
-from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
-from fastapi.templating import Jinja2Templates
-from pathlib import Path
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.admin_dashboard import load_dashboard_page_data
 from app.admin_helpers import (
     apply_click_link_filters,
     apply_link_filters,
     build_filter_query,
     earliest_link_created_at,
     link_filter_predicates,
-    load_profiles,
-    parse_profile_id,
-    platform_link_counts,
-    profile_link_counts,
-    cached_sidebar_link_counts,
     resolve_stats_period,
 )
 from app.config import get_settings
-from app.csrf import get_or_create_csrf_token, rotate_csrf_token
+from app.csrf import rotate_csrf_token
 from app.csv_stream import stream_csv
 from app.database import get_db
-from app.models import Click, Link, Profile
-from app.platforms import PLATFORMS, platform_color, platform_label
+from app.models import Click, Link
+from app.platforms import platform_label
 from app.spa import spa_index_response
-from app.services.label_match import account_label_display
 from app.services.account_avatar import (
     AVATAR_MODES,
     bootstrap_link_avatar,
@@ -47,89 +36,38 @@ from app.services.account_avatar import (
 from app.services.admin_avatar import admin_avatar_href, stream_link_avatar
 from app.services.avatar_image_cache import invalidate_link_avatar_cache
 from app.services.avatar_upload import delete_link_avatar_upload, is_upload_avatar_url
-from app.services.links_meta import apply_link_label, apply_link_profile
+from app.services.links_meta import apply_link_label
 from app.security import verify_env_password
 from app.services.ip_lockout import (
     clear_admin_failures,
     client_ip,
-    is_ip_banned_now,
     record_admin_password_failure,
-    MSG_BAN_HTML,
 )
 from app.services.geoip import resolved_city_mmdb_path, resolved_country_mmdb_path
 from app.services.stats import (
-    aggregate_clicks_for_links,
     bar_chart_items,
     click_counts_for_links_period,
     click_day_bucket_utc,
     dashboard_click_counts,
-    platform_click_stats,
-    profile_click_stats,
     stats_by_day,
     stats_summary,
     top_countries,
     top_device_types,
-    top_device_types_for_links,
     top_os,
-    top_os_for_links,
     top_referers,
     top_user_agents,
 )
-from app.services.stats_cache import (
-    invalidate_dashboard_counts_cache,
-    invalidate_sidebar_counts_cache,
-)
+from app.services.stats_cache import invalidate_dashboard_counts_cache
 from app.stats_range import (
-    DASHBOARD_DEFAULT_PRESET,
-    active_preset,
     dashboard_stats_range,
-    form_period_dates,
-    parse_range,
     stats_range,
 )
-from app.utils.bulk_labels import MAX_BULK_LABELS, parse_label_lines
-from app.utils.csv_import import MAX_IMPORT_BYTES, MAX_IMPORT_ROWS, parse_links_import_csv
-from app.template_globals import register_template_globals
+from app.utils.csv_import import MAX_IMPORT_BYTES, parse_links_import_csv
 from app.utils.slug import random_slug
 from app.url_validation import is_valid_destination_url
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
-MAX_BULK_DEST_UPDATE = 500
-
-_templates_dir = str(Path(__file__).resolve().parent.parent / "templates")
-templates = Jinja2Templates(directory=_templates_dir)
-register_template_globals(templates.env)
-templates.env.globals["admin_filter_href"] = (
-    lambda prof, plat: "/admin" + build_filter_query(prof, plat)
-)
-
-
-def _indicators_filter_href(
-    profile: str,
-    platform: str,
-    *,
-    active_preset: str,
-    period_from: str,
-    period_to: str,
-    preset: str | None = None,
-) -> str:
-    p = preset
-    if p is None and active_preset != "custom":
-        p = active_preset if active_preset != "all" else None
-    return "/indicators" + build_filter_query(
-        profile,
-        platform,
-        preset=p,
-        date_from=period_from if active_preset == "custom" else None,
-        date_to=period_to if active_preset == "custom" else None,
-    )
-
-
-templates.env.globals["indicators_filter_href"] = (
-    lambda prof, plat: _indicators_filter_href(prof, plat, active_preset="all", period_from="", period_to="")
-)
-templates.env.globals["get_csrf_token"] = get_or_create_csrf_token
 
 
 def _require_admin(request: Request) -> None:
@@ -415,68 +353,6 @@ async def profiles_page(request: Request):
     return spa_index_response()
 
 
-@router.post("/profiles/new")
-async def profile_create(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    name: str = Form(...),
-    color: str = Form("#6366f1"),
-):
-    _require_admin(request)
-    n = (name or "").strip()
-    if not n:
-        raise HTTPException(status_code=400, detail="Имя профиля обязательно")
-    c = (color or "#6366f1").strip()
-    if not c.startswith("#") or len(c) > 7:
-        c = "#6366f1"
-    db.add(Profile(name=n, color=c))
-    await db.commit()
-    return RedirectResponse("/admin/profiles", status_code=302)
-
-
-@router.post("/profiles/{profile_id}/edit")
-async def profile_edit(
-    request: Request,
-    profile_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    name: str = Form(...),
-    color: str = Form("#6366f1"),
-    next: str = Form("/admin"),
-) -> RedirectResponse:
-    _require_admin(request)
-    p = await db.get(Profile, profile_id)
-    if p is None:
-        raise HTTPException(404)
-    n = (name or "").strip()
-    if not n:
-        raise HTTPException(status_code=400, detail="Имя профиля обязательно")
-    c = (color or "#6366f1").strip()
-    if not c.startswith("#") or len(c) > 7:
-        c = "#6366f1"
-    p.name = n
-    p.color = c
-    await db.commit()
-    dest = (next or "/admin").strip()
-    if not dest.startswith("/admin"):
-        dest = "/admin"
-    return RedirectResponse(dest, status_code=302)
-
-
-@router.post("/profiles/{profile_id}/delete")
-async def profile_delete(
-    request: Request,
-    profile_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    next: str = Form("/admin/profiles"),
-) -> RedirectResponse:
-    _require_admin(request)
-    await db.execute(delete(Profile).where(Profile.id == profile_id))
-    await db.commit()
-    dest = (next or "/admin/profiles").strip()
-    if not dest.startswith("/admin"):
-        dest = "/admin/profiles"
-    return RedirectResponse(dest, status_code=302)
-
 
 @router.get("/links/new")
 async def link_new_get(request: Request) -> RedirectResponse:
@@ -491,32 +367,18 @@ async def link_new_post(
     db: AsyncSession = Depends(get_db),
     destination_url: str = Form(...),
     label: str | None = Form(None),
-    profile_id: str = Form(""),
 ):
     _require_admin(request)
     modal = (request.headers.get("x-modal-form") or "").strip() == "1"
-    profiles = await load_profiles(db)
 
     if not _valid_url(destination_url):
         msg = "URL должен начинаться с http:// или https://"
         if modal:
             return JSONResponse({"error": msg}, status_code=400)
-        return templates.TemplateResponse(
-            "link_form.html",
-            {
-                "request": request,
-                "link": None,
-                "error": msg,
-                "title": "Новая ссылка",
-                "profiles": profiles,
-                "selected_profile_id": parse_profile_id(profile_id),
-            },
-            status_code=400,
-        )
+        raise HTTPException(status_code=400, detail=msg)
     slug = await _unique_slug(db)
     link = Link(slug=slug, destination_url=destination_url.strip())
     apply_link_label(link, label)
-    apply_link_profile(link, parse_profile_id(profile_id))
     db.add(link)
     await bootstrap_link_avatar(db, link)
     await db.commit()
@@ -526,151 +388,14 @@ async def link_new_post(
     return RedirectResponse(dest, status_code=302)
 
 
-@router.post("/links/bulk")
-async def link_bulk_post(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    destination_url: str = Form(...),
-    labels: str = Form(...),
-    profile_id: str = Form(""),
-):
-    _require_admin(request)
-    modal = (request.headers.get("x-modal-form") or "").strip() == "1"
-    pid = parse_profile_id(profile_id)
-
-    if not _valid_url(destination_url):
-        msg = "URL должен начинаться с http:// или https://"
-        if modal:
-            return JSONResponse({"error": msg}, status_code=400)
-        raise HTTPException(status_code=400, detail=msg)
-
-    label_list = parse_label_lines(labels)
-    if not label_list:
-        msg = "Добавьте хотя бы один аккаунт (по одному на строку)."
-        if modal:
-            return JSONResponse({"error": msg}, status_code=400)
-        raise HTTPException(status_code=400, detail=msg)
-    if len(label_list) > MAX_BULK_LABELS:
-        msg = f"Не больше {MAX_BULK_LABELS} аккаунтов за раз."
-        if modal:
-            return JSONResponse({"error": msg}, status_code=400)
-        raise HTTPException(status_code=400, detail=msg)
-
-    dest_url = destination_url.strip()
-    new_links: list[Link] = []
-    for label in label_list:
-        slug = await _unique_slug(db)
-        link = Link(slug=slug, destination_url=dest_url)
-        apply_link_label(link, label)
-        apply_link_profile(link, pid)
-        db.add(link)
-        new_links.append(link)
-    for link in new_links:
-        await bootstrap_link_avatar(db, link, allow_http=False)
-    await db.commit()
-
-    prof_q = str(pid) if pid else "all"
-    redirect = "/admin" + build_filter_query(prof_q, "all")
-    if modal:
-        return JSONResponse({"redirect": redirect, "created": len(label_list)})
-    return RedirectResponse(redirect, status_code=302)
-
-
-@router.get("/api/links-picker")
-async def api_links_picker(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
-    platform: str = Query("all"),
-) -> JSONResponse:
-    """Ссылки для модалки массовой смены целевого URL (фильтр профиля и платформы)."""
-    _require_admin(request)
-    stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
-    stmt = apply_link_filters(stmt, profile=profile, platform=platform)
-    links = list((await db.execute(stmt)).scalars().all())
-    items = []
-    for link in links:
-        items.append(
-            {
-                "id": str(link.id),
-                "slug": link.slug,
-                "account": account_label_display(link.label) or "—",
-                "profile_id": str(link.profile_id) if link.profile_id else None,
-                "profile_name": link.profile.name if link.profile else None,
-                "platform": link.platform,
-                "platform_label": platform_label(link.platform) if link.platform else None,
-                "destination_url": link.destination_url,
-            }
-        )
-    return JSONResponse({"items": items})
-
-
-@router.post("/links/bulk-destination")
-async def links_bulk_destination(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    destination_url: str = Form(...),
-    link_ids: Annotated[list[str], Form()] = [],
-):
-    """Обновить целевой URL у выбранных ссылок."""
-    _require_admin(request)
-    modal = (request.headers.get("x-modal-form") or "").strip() == "1"
-
-    if not _valid_url(destination_url):
-        msg = "URL должен начинаться с http:// или https://"
-        if modal:
-            return JSONResponse({"error": msg}, status_code=400)
-        raise HTTPException(status_code=400, detail=msg)
-
-    raw_ids = [x.strip() for x in link_ids if x and x.strip()]
-    if not raw_ids:
-        msg = "Выберите хотя бы одну ссылку."
-        if modal:
-            return JSONResponse({"error": msg}, status_code=400)
-        raise HTTPException(status_code=400, detail=msg)
-    if len(raw_ids) > MAX_BULK_DEST_UPDATE:
-        msg = f"Не больше {MAX_BULK_DEST_UPDATE} ссылок за раз."
-        if modal:
-            return JSONResponse({"error": msg}, status_code=400)
-        raise HTTPException(status_code=400, detail=msg)
-
-    try:
-        ids = [uuid.UUID(x) for x in raw_ids]
-    except ValueError:
-        msg = "Некорректный идентификатор ссылки."
-        if modal:
-            return JSONResponse({"error": msg}, status_code=400)
-        raise HTTPException(status_code=400, detail=msg)
-
-    unique_ids = list(dict.fromkeys(ids))
-    dest = destination_url.strip()
-    result = await db.execute(
-        update(Link).where(Link.id.in_(unique_ids)).values(destination_url=dest)
-    )
-    await db.commit()
-    updated = int(result.rowcount or 0)
-    if updated == 0:
-        msg = "Не найдено ссылок для обновления."
-        if modal:
-            return JSONResponse({"error": msg}, status_code=400)
-        raise HTTPException(status_code=404, detail=msg)
-
-    redirect = "/admin"
-    if modal:
-        return JSONResponse({"redirect": redirect, "updated": updated})
-    return RedirectResponse(redirect, status_code=302)
-
-
 @router.post("/links/import-csv")
 async def link_import_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
     file: UploadFile = File(...),
-    profile_id: str = Form(""),
 ):
     _require_admin(request)
     modal = (request.headers.get("x-modal-form") or "").strip() == "1"
-    pid = parse_profile_id(profile_id)
     try:
         raw_bytes = await file.read()
         if len(raw_bytes) > MAX_IMPORT_BYTES:
@@ -702,7 +427,6 @@ async def link_import_csv(
         slug = await _unique_slug(db)
         link = Link(slug=slug, destination_url=row.destination_url.strip())
         apply_link_label(link, row.label)
-        apply_link_profile(link, pid)
         db.add(link)
         imported.append(link)
         created += 1
@@ -710,8 +434,7 @@ async def link_import_csv(
         await bootstrap_link_avatar(db, link, allow_http=False)
     await db.commit()
 
-    prof_q = str(pid) if pid else "all"
-    redirect = "/admin" + build_filter_query(prof_q, "all")
+    redirect = "/admin"
     if modal:
         return JSONResponse({"redirect": redirect, "created": created})
     return RedirectResponse(redirect, status_code=302)
@@ -722,36 +445,22 @@ async def link_edit_get(request: Request, link_id: uuid.UUID):
     return RedirectResponse(f"/admin/links/{link_id}/stats", status_code=302)
 
 
-@router.post("/links/{link_id}/edit", response_class=HTMLResponse)
+@router.post("/links/{link_id}/edit")
 async def link_edit_post(
     request: Request,
     link_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     destination_url: str = Form(...),
     label: str | None = Form(None),
-    profile_id: str = Form(""),
 ):
     _require_admin(request)
     link = await db.get(Link, link_id)
     if link is None:
         raise HTTPException(404)
-    profiles = await load_profiles(db)
     if not _valid_url(destination_url):
-        return templates.TemplateResponse(
-            "link_form.html",
-            {
-                "request": request,
-                "link": link,
-                "error": "URL должен начинаться с http:// или https://",
-                "title": "Правка ссылки",
-                "profiles": profiles,
-                "selected_profile_id": link.profile_id,
-            },
-            status_code=400,
-        )
+        raise HTTPException(status_code=400, detail="URL должен начинаться с http:// или https://")
     link.destination_url = destination_url.strip()
     apply_link_label(link, label)
-    apply_link_profile(link, parse_profile_id(profile_id))
     await bootstrap_link_avatar(db, link)
     await db.commit()
     return RedirectResponse(f"/admin/links/{link.id}/stats", status_code=302)
@@ -898,132 +607,6 @@ async def link_stats_data(
 async def link_stats(request: Request, link_id: uuid.UUID):
     return spa_index_response()
 
-
-async def render_indicators_page(
-    request: Request,
-    db: AsyncSession,
-    *,
-    profile: str = "all",
-    platform: str = "all",
-    date_from: str | None = None,
-    date_to: str | None = None,
-    preset: str | None = None,
-):
-    _require_admin(request)
-    earliest = await earliest_link_created_at(db)
-    active = active_preset(
-        date_from, date_to, preset, default=DASHBOARD_DEFAULT_PRESET
-    )
-    start, end = resolve_stats_period(
-        date_from, date_to, preset, earliest=earliest
-    )
-    period_from, period_to = form_period_dates(start, end)
-
-    id_stmt = apply_link_filters(select(Link.id), profile=profile, platform=platform)
-    link_ids = [row[0] for row in (await db.execute(id_stmt)).all()]
-
-    period_total, period_uniques = await aggregate_clicks_for_links(
-        db, link_ids, start, end
-    )
-    os_rows = await top_os_for_links(db, link_ids, start, end)
-    device_rows = await top_device_types_for_links(db, link_ids, start, end)
-    profile_stats = await profile_click_stats(db, link_ids, start, end)
-    plat_stats_raw = await platform_click_stats(db, link_ids, start, end)
-
-    os_chart = bar_chart_items(os_rows)
-    device_chart = bar_chart_items(device_rows)
-    profile_chart = bar_chart_items(
-        [(p["name"], p["clicks"]) for p in profile_stats],
-        colors={p["name"]: p["color"] for p in profile_stats},
-    )
-    platform_chart = bar_chart_items(
-        [
-            (
-                "Без платформы" if p["platform"] == "none" else platform_label(p["platform"]),
-                p["clicks"],
-            )
-            for p in plat_stats_raw
-        ],
-        colors={
-            (
-                "Без платформы" if p["platform"] == "none" else platform_label(p["platform"])
-            ): (
-                "#525a70" if p["platform"] == "none" else platform_color(p["platform"])
-            )
-            for p in plat_stats_raw
-        },
-    )
-
-    platform_filters = [
-        {"id": "all", "label": "Все", "color": None},
-    ]
-    for p in PLATFORMS:
-        platform_filters.append(
-            {
-                "id": p["id"],
-                "label": p["label"],
-                "color": p["color"],
-            }
-        )
-    platform_filters.append(
-        {"id": "none", "label": "Без платформы", "color": "#525a70"}
-    )
-
-    period_hrefs = {
-        "today": _indicators_filter_href(
-            profile, platform, active_preset=active, period_from=period_from,
-            period_to=period_to, preset="today",
-        ),
-        "week": _indicators_filter_href(
-            profile, platform, active_preset=active, period_from=period_from,
-            period_to=period_to, preset="week",
-        ),
-        "all": _indicators_filter_href(
-            profile, platform, active_preset=active, period_from=period_from,
-            period_to=period_to, preset="all",
-        ),
-    }
-
-    if active == "today":
-        period_label = "Сегодня (UTC)"
-    elif active == "week":
-        period_label = "7 дней"
-    elif active == "all":
-        period_label = "Всё время"
-    else:
-        period_label = f"{period_from} — {period_to}"
-
-    def indicators_href(prof: str, plat: str) -> str:
-        return _indicators_filter_href(
-            prof,
-            plat,
-            active_preset=active,
-            period_from=period_from,
-            period_to=period_to,
-            preset=active if active != "custom" else None,
-        )
-
-    return templates.TemplateResponse(
-        "indicators.html",
-        {
-            "request": request,
-            "filter_profile": profile,
-            "filter_platform": platform,
-            "active_preset": active,
-            "period_from": period_from,
-            "period_to": period_to,
-            "period_label": period_label,
-            "period_total": period_total,
-            "period_uniques": period_uniques,
-            "period_hrefs": period_hrefs,
-            "platform_filters": platform_filters,
-            "os_chart": os_chart,
-            "device_chart": device_chart,
-            "profile_chart": profile_chart,
-            "platform_chart": platform_chart,
-            "indicators_filter_href": indicators_href,
-        },
-    )
 
 
 @router.get("/indicators")
