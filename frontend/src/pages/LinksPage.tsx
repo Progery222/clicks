@@ -273,11 +273,7 @@ export function LinksPage() {
                         onClick={(e) => e.stopPropagation()}
                       >
                         <span className="row" style={{ gap: '0.45rem', minWidth: 0 }}>
-                          <Avatar
-                            url={row.account_avatar_url || row.destination_icon_url}
-                            fallbackUrl={row.platform_icon_url}
-                            name={row.destination_url}
-                          />
+                          <Avatar url={row.destination_icon_url} name={row.destination_url} />
                           <a
                             href={row.destination_url}
                             target="_blank"

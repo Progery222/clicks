@@ -17,6 +17,7 @@ from app.admin_dashboard import load_dashboard_page_data
 from app.admin_helpers import (
     apply_link_filters,
     cached_sidebar_link_counts,
+    destination_icons,
     destination_link_filters,
     destination_site_icon_url,
     earliest_link_created_at,
@@ -96,6 +97,7 @@ async def _unique_slug(db: AsyncSession) -> str:
 def _serialize_link(link: Link) -> dict[str, Any]:
     account_display = account_label_display(link.label) or link.label or link.slug
     display_name = (link.title or "").strip() or account_display
+    dest_icon, _dest_plat_icon = destination_icons(link.destination_url)
     return {
         "id": str(link.id),
         "slug": link.slug,
@@ -106,7 +108,7 @@ def _serialize_link(link: Link) -> dict[str, Any]:
         "platform_label": platform_label(link.platform),
         "platform_color": platform_color(link.platform),
         "platform_icon_url": platform_favicon_url(link.platform),
-        "destination_icon_url": destination_site_icon_url(link.destination_url),
+        "destination_icon_url": dest_icon or destination_site_icon_url(link.destination_url),
         "profile_id": str(link.profile_id) if link.profile_id else None,
         "profile": (
             {"id": str(link.profile.id), "name": link.profile.name, "color": link.profile.color}
