@@ -190,8 +190,7 @@ async def auth_me(request: Request, db: AsyncSession = Depends(get_db)) -> JSONR
     ip = client_ip(request)
     banned, _ = await is_ip_banned_now(db, ip)
     admin = bool(request.session.get("admin"))
-    csrf = get_or_create_csrf_token(request) if admin or True else None
-    # Always issue CSRF so login POST can send it after first GET /me
+    # CSRF выдаём всегда: SPA шлёт его на login после первого GET /me
     csrf = get_or_create_csrf_token(request)
     return JSONResponse(
         {
