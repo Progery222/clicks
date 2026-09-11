@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Indicators } from '../api'
-import { BarChart } from '../components'
+import { BarChart, Modal } from '../components'
 
 export function IndicatorsPage() {
   const [sp, setSp] = useSearchParams()
@@ -9,6 +9,7 @@ export function IndicatorsPage() {
   const preset = sp.get('preset') || 'all'
   const [data, setData] = useState<Indicators | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
 
   const load = useCallback(async () => {
     setError(null)
@@ -35,13 +36,36 @@ export function IndicatorsPage() {
     setSp(n, { replace: true })
   }
 
+  const exportQs = (() => {
+    const n = new URLSearchParams()
+    if (platform !== 'all') n.set('platform', platform)
+    if (preset !== 'all') n.set('preset', preset)
+    const s = n.toString()
+    return s ? `?${s}` : ''
+  })()
+
   if (error) return <div className="error-box">{error}</div>
   if (!data) return <div className="loading">Загрузка…</div>
 
   return (
     <div>
-      <h1 className="page-title">Показатели</h1>
-      <p className="muted small">Сводная аналитика по выбранным фильтрам · {data.period_label}</p>
+      <div className="row between wrap" style={{ gap: '1rem', alignItems: 'flex-start' }}>
+        <div>
+          <h1 className="page-title">Показатели</h1>
+          <p className="muted small">Сводная аналитика по выбранным фильтрам · {data.period_label}</p>
+        </div>
+        <div className="admin-actions">
+          <button type="button" className="btn" onClick={() => setImportOpen(true)}>
+            Импорт CSV
+          </button>
+          <a className="btn" href={`/admin/export/links.csv${exportQs}`}>
+            Ссылки CSV
+          </a>
+          <a className="btn" href={`/admin/export/clicks.csv${exportQs}`}>
+            Клики CSV
+          </a>
+        </div>
+      </div>
 
       <div className="stack" style={{ marginTop: '1rem' }}>
         <div className="pills">
@@ -138,6 +162,53 @@ export function IndicatorsPage() {
           </div>
         </div>
       </div>
+
+      <ImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onDone={() => setImportOpen(false)}
+      />
     </div>
+  )
+}
+
+function ImportModal({
+  open,
+  onClose,
+  onDone,
+}: {
+  open: boolean
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    const fd = new FormData(e.currentTarget)
+    try {
+      await api('/admin/api/links/import-csv', { method: 'POST', body: fd })
+      onDone()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal open={open} title="Импорт CSV" onClose={onClose}>
+      <form className="stack" onSubmit={onSubmit}>
+        {error ? <div className="error-box">{error}</div> : null}
+        <label className="field-label">
+          CSV файл
+          <input className="input" name="file" type="file" accept=".csv,text/csv" required />
+        </label>
+        <button className="btn btn-primary" type="submit" disabled={busy}>
+          Импортировать
+        </button>
+      </form>
+    </Modal>
   )
 }

@@ -20,7 +20,6 @@ export function LinksPage() {
 
   const [newOpen, setNewOpen] = useState(sp.get('new') === '1')
   const [bulkOpen, setBulkOpen] = useState(false)
-  const [importOpen, setImportOpen] = useState(false)
   const [destOpen, setDestOpen] = useState(false)
   const [actionsLink, setActionsLink] = useState<LinkRow | null>(null)
   const [editLink, setEditLink] = useState<LinkRow | null>(null)
@@ -77,8 +76,6 @@ export function LinksPage() {
     }
   }
 
-  const exportQs = data?.filter_qs || ''
-
   const destinationItems = useMemo(() => {
     const items = data?.destination_filters || []
     const q = destSearch.trim().toLowerCase()
@@ -105,18 +102,9 @@ export function LinksPage() {
           <button type="button" className="btn" onClick={() => setBulkOpen(true)}>
             Массовое создание
           </button>
-          <button type="button" className="btn" onClick={() => setImportOpen(true)}>
-            Импорт CSV
-          </button>
           <button type="button" className="btn" onClick={() => setDestOpen(true)}>
             Сменить цель
           </button>
-          <a className="btn" href={`/admin/export/links.csv${exportQs}`}>
-            Ссылки CSV
-          </a>
-          <a className="btn" href={`/admin/export/clicks.csv${exportQs}`}>
-            Клики CSV
-          </a>
         </div>
       </div>
 
@@ -340,14 +328,6 @@ export function LinksPage() {
         onClose={() => setBulkOpen(false)}
         onDone={() => {
           setBulkOpen(false)
-          void load()
-        }}
-      />
-      <ImportModal
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onDone={() => {
-          setImportOpen(false)
           void load()
         }}
       />
@@ -616,47 +596,6 @@ function BulkModal({
         </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Создать
-        </button>
-      </form>
-    </Modal>
-  )
-}
-
-function ImportModal({
-  open,
-  onClose,
-  onDone,
-}: {
-  open: boolean
-  onClose: () => void
-  onDone: () => void
-}) {
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    const fd = new FormData(e.currentTarget)
-    try {
-      await api('/admin/api/links/import-csv', { method: 'POST', body: fd })
-      onDone()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Ошибка')
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Modal open={open} title="Импорт CSV" onClose={onClose}>
-      <form className="stack" onSubmit={onSubmit}>
-        {error ? <div className="error-box">{error}</div> : null}
-        <label className="field-label">
-          CSV файл
-          <input className="input" name="file" type="file" accept=".csv,text/csv" required />
-        </label>
-        <button className="btn btn-primary" type="submit" disabled={busy}>
-          Импортировать
         </button>
       </form>
     </Modal>
