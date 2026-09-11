@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 
 MAX_BULK_LABELS = 200
@@ -26,4 +27,6 @@ def normalize_bulk_labels(raw: Iterable[str]) -> list[str]:
 
 
 def parse_label_lines(text: str) -> list[str]:
-    return normalize_bulk_labels(text.splitlines())
+    """Несколько аккаунтов: перевод строки, запятая или точка с запятой."""
+    chunks = re.split(r"[\n,;]+", (text or "").replace("\r\n", "\n").replace("\r", "\n"))
+    return normalize_bulk_labels(chunks)

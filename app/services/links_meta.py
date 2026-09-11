@@ -14,7 +14,7 @@ def apply_link_title(link: Link, title: str | None) -> None:
 
 
 def apply_link_label(link: Link, label: str | None) -> None:
-    """Один или несколько аккаунтов (по строке) — храним через перевод строки."""
+    """Один или несколько аккаунтов (строка / запятая) — храним через перевод строки."""
     accounts = parse_label_lines(label or "")
     link.label = "\n".join(accounts) if accounts else None
     platform = None

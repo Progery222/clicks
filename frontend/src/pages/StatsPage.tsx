@@ -219,8 +219,9 @@ function EditLinkModal({
             name="label"
             defaultValue={link.label || ''}
             rows={3}
-            placeholder="По одному на строку"
+            placeholder="https://instagram.com/one, https://t.me/two"
           />
+          <span className="muted small">Несколько аккаунтов — через запятую или с новой строки</span>
         </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
           Сохранить
