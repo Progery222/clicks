@@ -34,6 +34,7 @@ from app.csv_stream import stream_csv
 from app.database import get_db
 from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_color, platform_label
+from app.spa import spa_index_response
 from app.services.label_match import account_label_display
 from app.services.account_avatar import (
     AVATAR_MODES,
@@ -140,24 +141,11 @@ def _require_admin(request: Request) -> None:
     )
 
 
-@router.get("/login", response_class=HTMLResponse)
+@router.get("/login")
 async def login_page(request: Request, db: AsyncSession = Depends(get_db)):
     if request.session.get("admin"):
         return RedirectResponse("/admin", status_code=302)
-    ip = client_ip(request)
-    blocked = request.query_params.get("blocked") == "1"
-    banned_now, _ = await is_ip_banned_now(db, ip)
-    if banned_now:
-        blocked = True
-    return templates.TemplateResponse(
-        "login.html",
-        {
-            "request": request,
-            "error": None,
-            "blocked": blocked,
-            "block_message": MSG_BAN_HTML if blocked else None,
-        },
-    )
+    return spa_index_response()
 
 
 @router.post("/login", response_class=HTMLResponse)
@@ -166,6 +154,7 @@ async def login_post(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    """Legacy form login → redirect; SPA uses /admin/api/auth/login."""
     settings = get_settings()
     ip = client_ip(request)
     if verify_env_password(password, settings.admin_password):
@@ -176,24 +165,8 @@ async def login_post(
         return RedirectResponse("/admin", status_code=302)
     banned = await record_admin_password_failure(db, ip)
     if banned:
-        return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "error": None,
-                "blocked": True,
-                "block_message": MSG_BAN_HTML,
-            },
-        )
-    return templates.TemplateResponse(
-        "login.html",
-        {
-            "request": request,
-            "error": "Неверный пароль",
-            "blocked": False,
-            "block_message": None,
-        },
-    )
+        return RedirectResponse("/admin/login?blocked=1", status_code=302)
+    return RedirectResponse("/admin/login?error=1", status_code=302)
 
 
 @router.post("/logout")
@@ -347,112 +320,9 @@ async def link_avatar_mode_post(
     )
 
 
-@router.get("", response_class=HTMLResponse)
-async def dashboard(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    new: str | None = Query(None),
-    profile: str = Query("all"),
-    platform: str = Query("all"),
-    account: str | None = Query(None),
-    date_from: str | None = Query(None, alias="from"),
-    date_to: str | None = Query(None, alias="to"),
-    preset: str | None = Query(None),
-    sort: str | None = Query(None),
-    order: str | None = Query(None),
-):
-    _require_admin(request)
-    try:
-        dash = await load_dashboard_page_data(
-            db,
-            profile=profile,
-            platform=platform,
-            account=account,
-            date_from=date_from,
-            date_to=date_to,
-            preset=preset,
-            sort=sort,
-            order=order,
-        )
-    except Exception:
-        log.exception("load_dashboard_page_data failed")
-        dash = {
-            "link_rows": [],
-            "filter_profile": profile,
-            "filter_platform": platform,
-            "filter_account": (account or "").strip(),
-            "filter_qs": build_filter_query(profile, platform, account=account),
-            "active_preset": "all",
-            "period_from": "",
-            "period_to": "",
-            "period_label": "Всё время",
-            "period_total": 0,
-            "period_uniques": 0,
-            "platform_stats": [],
-            "period_hrefs": {
-                "today": "/admin"
-                + build_filter_query(profile, platform, account=account, preset="today"),
-                "week": "/admin"
-                + build_filter_query(profile, platform, account=account, preset="week"),
-                "all": "/admin" + build_filter_query(profile, platform, account=account),
-            },
-            "admin_filter_href": lambda prof, plat: "/admin"
-            + build_filter_query(prof, plat, account=account),
-        }
-    profiles = await load_profiles(db)
-    prof_counts, plat_counts = await cached_sidebar_link_counts(db)
-    profile_filters = [
-        {"id": "all", "name": "Все профили", "color": None, "count": prof_counts.get("all", 0)},
-        {
-            "id": "none",
-            "name": "Без профиля",
-            "color": None,
-            "count": prof_counts.get("none", 0),
-        },
-    ]
-    for p in profiles:
-        profile_filters.append(
-            {
-                "id": str(p.id),
-                "name": p.name,
-                "color": p.color,
-                "count": prof_counts.get(str(p.id), 0),
-            }
-        )
-    platform_filters = [{"id": "all", "label": "Все", "color": None, "count": plat_counts.get("all", 0)}]
-    platform_filters.append(
-        {
-            "id": "none",
-            "label": "Без платформы",
-            "color": None,
-            "count": plat_counts.get("none", 0),
-        }
-    )
-    for p in PLATFORMS:
-        platform_filters.append(
-            {
-                "id": p["id"],
-                "label": p["label"],
-                "color": p["color"],
-                "count": plat_counts.get(p["id"], 0),
-            }
-        )
-    default_profile_id = None
-    if profile not in ("all", "none"):
-        default_profile_id = parse_profile_id(profile)
-    return templates.TemplateResponse(
-        "link_list.html",
-        {
-            "request": request,
-            "open_new_link_modal": new == "1",
-            "profiles": profiles,
-            "platforms": PLATFORMS,
-            "profile_filters": profile_filters,
-            "platform_filters": platform_filters,
-            "selected_profile_id": default_profile_id,
-            **dash,
-        },
-    )
+@router.get("")
+async def dashboard(request: Request):
+    return spa_index_response()
 
 
 @router.get("/api/link-counts")
@@ -540,16 +410,9 @@ async def _unique_slug(db: AsyncSession) -> str:
     raise RuntimeError("Could not allocate slug")
 
 
-@router.get("/profiles", response_class=HTMLResponse)
-async def profiles_page(request: Request, db: AsyncSession = Depends(get_db)):
-    _require_admin(request)
-    profiles = await load_profiles(db)
-    counts = await profile_link_counts(db)
-    profile_counts: dict[uuid.UUID, int] = {p.id: counts.get(str(p.id), 0) for p in profiles}
-    return templates.TemplateResponse(
-        "profiles.html",
-        {"request": request, "profiles": profiles, "profile_counts": profile_counts},
-    )
+@router.get("/profiles")
+async def profiles_page(request: Request):
+    return spa_index_response()
 
 
 @router.post("/profiles/new")
@@ -854,28 +717,9 @@ async def link_import_csv(
     return RedirectResponse(redirect, status_code=302)
 
 
-@router.get("/links/{link_id}/edit", response_class=HTMLResponse)
-async def link_edit_get(
-    request: Request,
-    link_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    _require_admin(request)
-    link = await db.get(Link, link_id)
-    if link is None:
-        raise HTTPException(404)
-    profiles = await load_profiles(db)
-    return templates.TemplateResponse(
-        "link_form.html",
-        {
-            "request": request,
-            "link": link,
-            "error": None,
-            "title": "Правка ссылки",
-            "profiles": profiles,
-            "selected_profile_id": link.profile_id,
-        },
-    )
+@router.get("/links/{link_id}/edit")
+async def link_edit_get(request: Request, link_id: uuid.UUID):
+    return RedirectResponse(f"/admin/links/{link_id}/stats", status_code=302)
 
 
 @router.post("/links/{link_id}/edit", response_class=HTMLResponse)
@@ -1050,67 +894,9 @@ async def link_stats_data(
     )
 
 
-@router.get("/links/{link_id}/stats", response_class=HTMLResponse)
-async def link_stats(
-    request: Request,
-    link_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    date_from: str | None = Query(None, alias="from"),
-    date_to: str | None = Query(None, alias="to"),
-    preset: str | None = Query(None),
-):
-    _require_admin(request)
-    link = await db.get(Link, link_id)
-    if link is None:
-        raise HTTPException(404)
-    if (link.account_avatar_mode or "auto") == "auto" and not link.account_avatar_url:
-        await bootstrap_link_avatar(db, link, allow_http=False)
-        await db.commit()
-    start, end = stats_range(
-        link, date_from, date_to, preset, default_preset="all"
-    )
-    active = active_preset(date_from, date_to, preset, default="all")
-    period_from, period_to = form_period_dates(start, end)
-    total, uniq = await stats_summary(session=db, link_id=link.id, start=start, end=end)
-    countries = await top_countries(session=db, link_id=link.id, start=start, end=end)
-    os_rows = await top_os(session=db, link_id=link.id, start=start, end=end)
-    device_rows = await top_device_types(session=db, link_id=link.id, start=start, end=end)
-    day_rows = await stats_by_day(session=db, link_id=link.id, start=start, end=end)
-    clicks_chart = bar_chart_items([(d["day"], d["clicks"]) for d in day_rows])
-    countries_chart = bar_chart_items([(c or "—", n) for c, n in countries])
-    os_chart = bar_chart_items(os_rows)
-    device_chart = bar_chart_items(device_rows)
-
-    geoip_db_present = (
-        resolved_city_mmdb_path() is not None or resolved_country_mmdb_path() is not None
-    )
-    countries_missing_code = any((not cc) for cc, _ in countries)
-    base = str(request.base_url).rstrip("/")
-    short_url = f"{base}/r/{link.slug}"
-    return templates.TemplateResponse(
-        "link_stats.html",
-        {
-            "request": request,
-            "link": link,
-            "total": total,
-            "uniques": uniq,
-            "countries": countries,
-            "os_rows": os_rows,
-            "device_rows": device_rows,
-            "clicks_chart": clicks_chart,
-            "countries_chart": countries_chart,
-            "os_chart": os_chart,
-            "device_chart": device_chart,
-            "period_from": period_from,
-            "period_to": period_to,
-            "active_preset": active,
-            "short_url": short_url,
-            "geoip_db_present": geoip_db_present,
-            "countries_missing_code": countries_missing_code,
-            "avatar_src": admin_avatar_href(link),
-            "avatar_mode": link.account_avatar_mode or "auto",
-        },
-    )
+@router.get("/links/{link_id}/stats")
+async def link_stats(request: Request, link_id: uuid.UUID):
+    return spa_index_response()
 
 
 async def render_indicators_page(
@@ -1240,25 +1026,9 @@ async def render_indicators_page(
     )
 
 
-@router.get("/indicators", response_class=HTMLResponse)
-async def admin_indicators_alias(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
-    platform: str = Query("all"),
-    date_from: str | None = Query(None, alias="from"),
-    date_to: str | None = Query(None, alias="to"),
-    preset: str | None = Query(None),
-):
-    return await render_indicators_page(
-        request,
-        db,
-        profile=profile,
-        platform=platform,
-        date_from=date_from,
-        date_to=date_to,
-        preset=preset,
-    )
+@router.get("/indicators")
+async def admin_indicators_alias():
+    return spa_index_response()
 
 
 @router.get("/export/links.csv")

@@ -1,3 +1,11 @@
+# Multi-stage: SPA + FastAPI
+FROM node:22-alpine AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -11,9 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY alembic.ini alembic.ini
 COPY alembic alembic
 COPY app app
+COPY --from=frontend /frontend/dist /app/app/static/spa
 
-# DB-IP Country MMDB в образе — на Railway не зависит от скачивания при старте контейнера.
-# Лицензия CC BY 4.0: https://db-ip.com
 RUN mkdir -p data && curl -fsSL --retry 3 --connect-timeout 20 --max-time 180 \
     -o data/dbip-country.mmdb \
     "https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-country-mmdb@latest/dbip-country.mmdb" \

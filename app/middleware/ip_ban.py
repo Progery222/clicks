@@ -48,6 +48,9 @@ class IpAuthBanMiddleware(BaseHTTPMiddleware):
         ra = str(retry_after_seconds(until))
 
         if path.startswith("/admin/api/"):
+            # SPA login / me must still respond (blocked flag in JSON)
+            if path in ("/admin/api/auth/me", "/admin/api/auth/login"):
+                return await call_next(request)
             return JSONResponse(
                 status_code=429,
                 content={"detail": MSG_BAN_JSON},

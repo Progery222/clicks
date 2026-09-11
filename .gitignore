@@ -3,6 +3,10 @@
 .venv
 venv
 *.mmdb
+frontend/node_modules/
+frontend/dist/
+app/static/spa/**
+!app/static/spa/.gitkeep
 # Локальные диагностические скрипты (не коммитить)
 scripts/account-*.sh
 scripts/accounts-*.sh

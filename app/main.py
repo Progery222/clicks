@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -17,9 +17,8 @@ from app.jobs import cleanup_old_clicks
 from app.middleware.csrf import CsrfMiddleware
 from app.middleware.ip_ban import IpAuthBanMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.database import get_db
-from app.routers import admin, api_v1, health, redirect
-from app.routers.admin import render_indicators_page
+from app.routers import admin, admin_api, api_v1, health, redirect
+from app.spa import spa_index_response
 from app.services.dbip_country_download import ensure_dbip_country_db
 from app.services.geolite_download import ensure_geolite_city_db
 from app.services.geoip import (
@@ -147,28 +146,13 @@ def create_app() -> FastAPI:
     async def privacy_page(request: Request):
         return templates.TemplateResponse("privacy.html", {"request": request})
 
-    @app.get("/indicators", response_class=HTMLResponse, include_in_schema=False)
-    async def indicators_page(
-        request: Request,
-        db=Depends(get_db),
-        profile: str = Query("all"),
-        platform: str = Query("all"),
-        date_from: str | None = Query(None, alias="from"),
-        date_to: str | None = Query(None, alias="to"),
-        preset: str | None = Query(None),
-    ):
-        return await render_indicators_page(
-            request,
-            db,
-            profile=profile,
-            platform=platform,
-            date_from=date_from,
-            date_to=date_to,
-            preset=preset,
-        )
+    @app.get("/indicators", include_in_schema=False)
+    async def indicators_page():
+        return spa_index_response()
 
     app.include_router(health.router)
     app.include_router(api_v1.router)
+    app.include_router(admin_api.router)
     app.include_router(admin.router)
     app.include_router(redirect.router)
     return app

@@ -14,7 +14,7 @@ from app.csrf import CSRF_FORM_FIELD, CSRF_HEADER, CSRF_SESSION_KEY
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 # POST без CSRF: первый вход (сессии ещё нет токена до ответа login)
-_CSRF_EXEMPT = frozenset({"/admin/login"})
+_CSRF_EXEMPT = frozenset({"/admin/login", "/admin/api/auth/login"})
 
 
 class CsrfMiddleware(BaseHTTPMiddleware):
