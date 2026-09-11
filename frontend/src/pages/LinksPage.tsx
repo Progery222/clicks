@@ -76,6 +76,7 @@ export function LinksPage() {
   const [actionsLink, setActionsLink] = useState<LinkRow | null>(null)
   const [editLink, setEditLink] = useState<LinkRow | null>(null)
   const [expandedAccounts, setExpandedAccounts] = useState<Record<string, boolean>>({})
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -100,6 +101,27 @@ export function LinksPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    setSelectedIds([])
+  }, [platform, account, destination, preset, sort, order])
+
+  const visibleIds = useMemo(() => (data?.links || []).map((r) => r.id), [data?.links])
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id))
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.includes(id))
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  function toggleSelectAllVisible() {
+    if (allVisibleSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)))
+    } else {
+      setSelectedIds((prev) => [...new Set([...prev, ...visibleIds])])
+    }
+  }
 
   function setFilter(next: Record<string, string>) {
     const merged = {
@@ -155,8 +177,14 @@ export function LinksPage() {
           <button type="button" className="btn" onClick={() => setBulkOpen(true)}>
             Массовое создание
           </button>
-          <button type="button" className="btn" onClick={() => setDestOpen(true)}>
-            Сменить цель
+          <button
+            type="button"
+            className="btn"
+            disabled={!selectedIds.length}
+            title={selectedIds.length ? undefined : 'Выберите ссылки в таблице'}
+            onClick={() => setDestOpen(true)}
+          >
+            Действия{selectedIds.length ? ` (${selectedIds.length})` : ''}
           </button>
         </div>
       </div>
@@ -286,6 +314,17 @@ export function LinksPage() {
               <table className="table">
                 <thead>
                   <tr>
+                    <th style={{ width: '2.25rem' }} onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected
+                        }}
+                        onChange={toggleSelectAllVisible}
+                        aria-label="Выбрать все на странице"
+                      />
+                    </th>
                     <th>Название</th>
                     <th>С какого аккаунта(ов)</th>
                     <th>Цель</th>
@@ -305,6 +344,14 @@ export function LinksPage() {
                 <tbody>
                   {data.links.map((row) => (
                     <tr key={row.id} onClick={() => nav(`/admin/links/${row.id}/stats`)}>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(row.id)}
+                          onChange={() => toggleSelect(row.id)}
+                          aria-label="Выбрать ссылку"
+                        />
+                      </td>
                       <td>{row.title?.trim() || '—'}</td>
                       <td onClick={(e) => e.stopPropagation()}>
                         <AccountCell
@@ -364,7 +411,7 @@ export function LinksPage() {
                   ))}
                   {!data.links.length ? (
                     <tr style={{ cursor: 'default' }}>
-                      <td colSpan={6} className="muted">
+                      <td colSpan={7} className="muted">
                         Нет ссылок по фильтру
                       </td>
                     </tr>
@@ -406,11 +453,13 @@ export function LinksPage() {
           void load()
         }}
       />
-      <DestModal
+      <BulkActionsModal
         open={destOpen}
+        linkIds={selectedIds}
         onClose={() => setDestOpen(false)}
         onDone={() => {
           setDestOpen(false)
+          setSelectedIds([])
           void load()
         }}
       />
@@ -692,36 +741,39 @@ function BulkModal({
   )
 }
 
-function DestModal({
+function BulkActionsModal({
   open,
+  linkIds,
   onClose,
   onDone,
 }: {
   open: boolean
+  linkIds: string[]
   onClose: () => void
   onDone: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [items, setItems] = useState<{ id: string; display: string }[]>([])
-  const [selected, setSelected] = useState<string[]>([])
+  const [mode, setMode] = useState<'menu' | 'destination' | 'delete'>('menu')
 
   useEffect(() => {
-    if (!open) return
-    void api<{ items: { id: string; display: string }[] }>('/admin/api/links-picker').then((r) =>
-      setItems(r.items),
-    )
+    if (open) {
+      setMode('menu')
+      setError(null)
+      setBusy(false)
+    }
   }, [open])
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onChangeDestination(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!linkIds.length) return
     setBusy(true)
     setError(null)
     const fd = new FormData(e.currentTarget)
     try {
       await api('/admin/api/links/bulk-destination', {
         method: 'POST',
-        json: { destination_url: fd.get('destination_url'), link_ids: selected },
+        json: { destination_url: fd.get('destination_url'), link_ids: linkIds },
       })
       onDone()
     } catch (err) {
@@ -731,34 +783,87 @@ function DestModal({
     }
   }
 
+  async function onDelete() {
+    if (!linkIds.length) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api('/admin/api/links/bulk-delete', {
+        method: 'POST',
+        json: { link_ids: linkIds },
+      })
+      onDone()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Ошибка')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const title =
+    mode === 'destination'
+      ? 'Сменить цель'
+      : mode === 'delete'
+        ? 'Удалить ссылки'
+        : 'Действия'
+
   return (
-    <Modal open={open} title="Сменить цель" onClose={onClose} wide>
-      <form className="stack" onSubmit={onSubmit}>
+    <Modal open={open} title={title} onClose={onClose}>
+      <div className="stack">
         {error ? <div className="error-box">{error}</div> : null}
-        <label className="field-label">
-          Новый URL
-          <input className="input" name="destination_url" type="url" required />
-        </label>
-        <div className="stack" style={{ maxHeight: '12rem', overflow: 'auto' }}>
-          {items.map((it) => (
-            <label key={it.id} className="row" style={{ gap: '0.5rem' }}>
-              <input
-                type="checkbox"
-                checked={selected.includes(it.id)}
-                onChange={(e) => {
-                  setSelected((prev) =>
-                    e.target.checked ? [...prev, it.id] : prev.filter((x) => x !== it.id),
-                  )
-                }}
-              />
-              <span>{it.display}</span>
+        <p className="muted small">Выбрано ссылок: {linkIds.length}</p>
+
+        {mode === 'menu' ? (
+          <div className="stack">
+            <button type="button" className="btn" onClick={() => setMode('destination')}>
+              Сменить цель
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => setMode('delete')}>
+              Удалить
+            </button>
+          </div>
+        ) : null}
+
+        {mode === 'destination' ? (
+          <form className="stack" onSubmit={onChangeDestination}>
+            <label className="field-label">
+              Новый URL цели
+              <input className="input" name="destination_url" type="url" required placeholder="https://" />
             </label>
-          ))}
-        </div>
-        <button className="btn btn-primary" type="submit" disabled={busy || !selected.length}>
-          Обновить ({selected.length})
-        </button>
-      </form>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              <button type="button" className="btn" onClick={() => setMode('menu')} disabled={busy}>
+                Назад
+              </button>
+              <button className="btn btn-primary" type="submit" disabled={busy || !linkIds.length}>
+                Обновить цель
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        {mode === 'delete' ? (
+          <div className="stack">
+            <p>
+              Удалить {linkIds.length} ссылк
+              {linkIds.length === 1 ? 'у' : linkIds.length < 5 ? 'и' : 'ок'} вместе со статистикой
+              кликов? Это нельзя отменить.
+            </p>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              <button type="button" className="btn" onClick={() => setMode('menu')} disabled={busy}>
+                Назад
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => void onDelete()}
+                disabled={busy || !linkIds.length}
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </Modal>
   )
 }

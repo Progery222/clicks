@@ -201,6 +201,10 @@ class BulkDestBody(BaseModel):
     link_ids: list[str] = Field(default_factory=list)
 
 
+class BulkIdsBody(BaseModel):
+    link_ids: list[str] = Field(default_factory=list)
+
+
 class ProfileCreateBody(BaseModel):
     name: str
     color: str | None = None
@@ -464,7 +468,31 @@ async def bulk_destination(
         update(Link).where(Link.id.in_(unique_ids)).values(destination_url=body.destination_url.strip())
     )
     await db.commit()
+    invalidate_dashboard_counts_cache()
     return JSONResponse({"updated": int(result.rowcount or 0)})
+
+
+@router.post("/links/bulk-delete")
+async def bulk_delete_links(
+    request: Request,
+    body: BulkIdsBody,
+    db: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    _require_admin(request)
+    if not body.link_ids:
+        raise HTTPException(status_code=400, detail="Выберите хотя бы одну ссылку")
+    if len(body.link_ids) > MAX_BULK_DEST_UPDATE:
+        raise HTTPException(status_code=400, detail=f"Не больше {MAX_BULK_DEST_UPDATE} ссылок")
+    try:
+        ids = [uuid.UUID(x) for x in body.link_ids]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Некорректный id") from e
+    unique_ids = list(dict.fromkeys(ids))
+    await db.execute(delete(Click).where(Click.link_id.in_(unique_ids)))
+    result = await db.execute(delete(Link).where(Link.id.in_(unique_ids)))
+    await db.commit()
+    invalidate_dashboard_counts_cache()
+    return JSONResponse({"deleted": int(result.rowcount or 0)})
 
 
 @router.post("/links/import-csv")
