@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Если пусто — эндпоинты /api/v1/* отвечают 503 (см. app/routers/api_v1.py).
     api_token: str | None = None
 
+    sqladmin_username: str = "sqladmin"
+    # Если пусто — используется ADMIN_PASSWORD
+    sqladmin_password: str = ""
+
     # bcrypt truncates at 72 bytes; passlib handles str
     geoip_city_db_path: str | None = None
     maxmind_license_key: str | None = None

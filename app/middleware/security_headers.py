@@ -29,5 +29,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "max-age=31536000; includeSubDomains",
             )
         if settings.content_security_policy:
-            response.headers.setdefault("Content-Security-Policy", settings.content_security_policy)
+            # SQLAdmin тянет Tabler/FontAwesome с CDN — без CSP на /sqladmin
+            if not request.url.path.startswith("/sqladmin"):
+                response.headers.setdefault(
+                    "Content-Security-Policy", settings.content_security_policy
+                )
         return response

@@ -38,7 +38,7 @@ class NoCacheAdminHtmlMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path.startswith("/admin/avatar/"):
             return response
-        if path.startswith("/admin") or path.startswith("/api") or path in ("/privacy", "/indicators"):
+        if path.startswith("/admin") or path.startswith("/api") or path.startswith("/sqladmin") or path in ("/privacy", "/indicators"):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Vary"] = "Cookie"
@@ -155,6 +155,10 @@ def create_app() -> FastAPI:
     app.include_router(admin_api.router)
     app.include_router(admin.router)
     app.include_router(redirect.router)
+
+    from app.sqladmin_setup import setup_sqladmin
+
+    setup_sqladmin(app)
     return app
 
 
