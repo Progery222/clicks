@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { api, ApiError, setCsrf } from '../api'
 import { useAuth } from '../auth'
+import { Shell } from '../components'
 
 export function LoginPage() {
   const { me, loading, refresh, theme, cycleTheme } = useAuth()
