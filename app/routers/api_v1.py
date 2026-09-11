@@ -30,7 +30,7 @@ from app.models import Click, Link, Profile
 from app.platforms import PLATFORMS, platform_label
 from app.services.account_avatar import bootstrap_link_avatar
 from app.services.avatar_image_cache import invalidate_link_avatar_cache
-from app.services.links_meta import apply_link_label, apply_link_profile
+from app.services.links_meta import apply_link_label, apply_link_profile, apply_link_title
 from app.url_validation import is_valid_destination_url
 from app.services.ip_lockout import clear_api_failures, client_ip, record_api_token_failure
 from app.services.rate_limit import allow_request
@@ -140,6 +140,7 @@ class ProfilesListOut(BaseModel):
 
 class LinkCreate(BaseModel):
     destination_url: str
+    title: str | None = None
     label: str | None = None
     profile_id: uuid.UUID | None = None
 
@@ -162,6 +163,7 @@ class LinksBulkOut(BaseModel):
 
 class LinkPatch(BaseModel):
     destination_url: str | None = None
+    title: str | None = None
     label: str | None = None
     profile_id: uuid.UUID | None = None
     clear_profile: bool = False
@@ -173,6 +175,7 @@ class LinkOut(BaseModel):
     id: uuid.UUID
     slug: str
     destination_url: str
+    title: str | None = None
     label: str | None
     platform: str | None = None
     platform_label: str | None = None
@@ -196,6 +199,7 @@ class LinkOut(BaseModel):
             id=link.id,
             slug=link.slug,
             destination_url=link.destination_url,
+            title=link.title,
             label=link.label,
             platform=link.platform,
             platform_label=platform_label(link.platform),
@@ -483,6 +487,7 @@ async def create_link(_: ApiTokenDep, db: DbDep, body: LinkCreate) -> LinkOut:
     pid = await _ensure_profile(db, body.profile_id)
     slug = await _unique_slug(db)
     link = Link(slug=slug, destination_url=body.destination_url.strip())
+    apply_link_title(link, body.title)
     apply_link_label(link, body.label)
     apply_link_profile(link, pid)
     db.add(link)
@@ -591,6 +596,9 @@ async def patch_link(
                 detail="URL must start with http:// or https://",
             )
         link.destination_url = url.strip()
+    if "title" in data:
+        raw = data["title"]
+        apply_link_title(link, None if raw is None else str(raw))
     if "label" in data:
         raw = data["label"]
         apply_link_label(link, None if raw is None else str(raw))

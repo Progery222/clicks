@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from urllib.parse import urlencode
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -43,7 +43,11 @@ def normalize_account_search(raw: str | None) -> str | None:
 
 def account_label_ilike(term: str):
     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return Link.label.ilike(f"%{escaped}%", escape="\\")
+    pattern = f"%{escaped}%"
+    return or_(
+        Link.label.ilike(pattern, escape="\\"),
+        Link.title.ilike(pattern, escape="\\"),
+    )
 
 
 def build_filter_query(

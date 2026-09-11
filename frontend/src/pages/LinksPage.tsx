@@ -254,7 +254,7 @@ export function LinksPage() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Slug</th>
+                    <th>Название</th>
                     <th>Профиль</th>
                     <th>Платф.</th>
                     <th>Аккаунт</th>
@@ -274,9 +274,7 @@ export function LinksPage() {
                 <tbody>
                   {data.links.map((row) => (
                     <tr key={row.id} onClick={() => nav(`/admin/links/${row.id}/stats`)}>
-                      <td>
-                        <code className="slug">{row.slug}</code>
-                      </td>
+                      <td>{row.title?.trim() || '—'}</td>
                       <td>
                         {row.profile ? (
                           <span className="row" style={{ gap: '0.35rem' }}>
@@ -384,6 +382,7 @@ function NewLinkModal({
         method: 'POST',
         json: {
           destination_url: fd.get('destination_url'),
+          title: fd.get('title') || null,
           label: fd.get('label') || null,
           profile_id: fd.get('profile_id') || '',
         },
@@ -402,6 +401,10 @@ function NewLinkModal({
         <label className="field-label">
           Цель (URL)
           <input className="input" name="destination_url" type="url" required placeholder="https://" />
+        </label>
+        <label className="field-label">
+          Название
+          <input className="input" name="title" placeholder="Как отображать в таблице" />
         </label>
         <label className="field-label">
           Аккаунт / метка

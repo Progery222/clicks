@@ -61,7 +61,7 @@ export function StatsPage() {
         <div className="row" style={{ gap: '0.85rem', alignItems: 'center' }}>
           <Avatar url={link.account_avatar_url} name={link.account_display || link.slug} size="lg" />
           <div>
-            <h1 className="page-title">{link.label || link.slug}</h1>
+            <h1 className="page-title">{link.display_name || link.title || link.label || link.slug}</h1>
             <p className="muted small">
               Короткая:{' '}
               <a href={data.short_url} target="_blank" rel="noreferrer">
@@ -197,6 +197,7 @@ function EditLinkModal({
         method: 'PATCH',
         json: {
           destination_url: fd.get('destination_url'),
+          title: fd.get('title'),
           label: fd.get('label'),
           profile_id: fd.get('profile_id') || '',
         },
@@ -215,6 +216,10 @@ function EditLinkModal({
         <label className="field-label">
           Цель
           <input className="input" name="destination_url" defaultValue={link.destination_url} required />
+        </label>
+        <label className="field-label">
+          Название
+          <input className="input" name="title" defaultValue={link.title || ''} placeholder="Как отображать в таблице" />
         </label>
         <label className="field-label">
           Метка

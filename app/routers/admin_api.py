@@ -39,7 +39,8 @@ from app.services.ip_lockout import (
     is_ip_banned_now,
     record_admin_password_failure,
 )
-from app.services.links_meta import apply_link_label, apply_link_profile
+from app.services.label_match import account_label_display
+from app.services.links_meta import apply_link_label, apply_link_profile, apply_link_title
 from app.services.stats import (
     aggregate_clicks_for_links,
     bar_chart_items,
@@ -85,10 +86,13 @@ async def _unique_slug(db: AsyncSession) -> str:
 
 
 def _serialize_link(link: Link) -> dict[str, Any]:
+    account_display = account_label_display(link.label) or link.label or link.slug
+    display_name = (link.title or "").strip() or account_display
     return {
         "id": str(link.id),
         "slug": link.slug,
         "destination_url": link.destination_url,
+        "title": link.title,
         "label": link.label,
         "platform": link.platform,
         "platform_label": platform_label(link.platform),
@@ -100,6 +104,8 @@ def _serialize_link(link: Link) -> dict[str, Any]:
             else None
         ),
         "account_avatar_url": admin_avatar_href(link),
+        "account_display": account_display,
+        "display_name": display_name,
         "avatar_mode": link.account_avatar_mode or "auto",
         "created_at": link.created_at.isoformat() if link.created_at else None,
     }
@@ -107,9 +113,12 @@ def _serialize_link(link: Link) -> dict[str, Any]:
 
 def _serialize_link_row(row: dict) -> dict[str, Any]:
     link: Link = row["link"]
+    base = _serialize_link(link)
+    account_display = row.get("account_display") or base["account_display"]
     return {
-        **_serialize_link(link),
-        "account_display": row.get("account_display") or link.label or link.slug,
+        **base,
+        "account_display": account_display,
+        "display_name": (link.title or "").strip() or account_display,
         "total": int(row.get("total") or 0),
         "today": int(row.get("today") or 0),
         "period_clicks": int(row.get("period_clicks") or 0),
@@ -127,6 +136,7 @@ class LoginBody(BaseModel):
 
 class LinkCreateBody(BaseModel):
     destination_url: str
+    title: str | None = None
     label: str | None = None
     profile_id: str | None = ""
 
@@ -139,6 +149,7 @@ class LinkBulkBody(BaseModel):
 
 class LinkUpdateBody(BaseModel):
     destination_url: str | None = None
+    title: str | None = None
     label: str | None = None
     profile_id: str | None = Field(default=None)
 
@@ -323,6 +334,7 @@ async def create_link(
         raise HTTPException(status_code=400, detail="URL должен начинаться с http:// или https://")
     slug = await _unique_slug(db)
     link = Link(slug=slug, destination_url=body.destination_url.strip())
+    apply_link_title(link, body.title)
     apply_link_label(link, body.label)
     apply_link_profile(link, parse_profile_id(body.profile_id or ""))
     db.add(link)
@@ -454,6 +466,8 @@ async def update_link(
         if not _valid_url(body.destination_url):
             raise HTTPException(status_code=400, detail="URL должен начинаться с http:// или https://")
         link.destination_url = body.destination_url.strip()
+    if body.title is not None:
+        apply_link_title(link, body.title)
     if body.label is not None:
         apply_link_label(link, body.label)
     if body.profile_id is not None:
@@ -736,15 +750,18 @@ async def links_picker(
     links = list((await db.execute(stmt)).scalars().all())
     items = []
     for link in links:
+        title = (link.title or "").lower()
         label = (link.label or link.slug or "").lower()
-        if term and term not in label and term not in link.slug.lower():
+        if term and term not in label and term not in title and term not in link.slug.lower():
             continue
+        display = (link.title or "").strip() or link.label or link.slug
         items.append(
             {
                 "id": str(link.id),
                 "slug": link.slug,
+                "title": link.title,
                 "label": link.label,
-                "display": link.label or link.slug,
+                "display": display,
             }
         )
     return JSONResponse({"items": items[:40]})

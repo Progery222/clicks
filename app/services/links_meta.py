@@ -8,6 +8,10 @@ from app.models import Link
 from app.platforms import detect_platform_from_text
 
 
+def apply_link_title(link: Link, title: str | None) -> None:
+    link.title = (title or "").strip() or None
+
+
 def apply_link_label(link: Link, label: str | None) -> None:
     link.label = (label or "").strip() or None
     link.platform = detect_platform_from_text(link.label)

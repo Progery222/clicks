@@ -69,6 +69,7 @@ export type LinkRow = {
   id: string
   slug: string
   destination_url: string
+  title: string | null
   label: string | null
   platform: string | null
   platform_label: string
@@ -77,11 +78,12 @@ export type LinkRow = {
   profile: { id: string; name: string; color: string } | null
   account_avatar_url: string | null
   account_display: string
+  display_name: string
   avatar_mode: string
-  total: number
-  today: number
-  period_clicks: number
-  period_uniques: number
+  total?: number
+  today?: number
+  period_clicks?: number
+  period_uniques?: number
   created_at: string | null
 }
 
