@@ -116,6 +116,8 @@ class LinkCreate(BaseModel):
     title: str | None = None
     label: str | None = None
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class LinkBulkCreate(BaseModel):
     """Одна целевая ссылка и несколько аккаунтов — по одной короткой ссылке на аккаунт."""
