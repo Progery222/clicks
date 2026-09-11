@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Dashboard, type LinkRow } from '../api'
 import { Avatar, Modal } from '../components'
@@ -8,6 +8,7 @@ export function LinksPage() {
   const nav = useNavigate()
   const platform = sp.get('platform') || 'all'
   const account = sp.get('account') || ''
+  const destination = sp.get('destination') || 'all'
   const preset = sp.get('preset') || 'all'
   const sort = sp.get('sort') || ''
   const order = sp.get('order') || ''
@@ -15,6 +16,7 @@ export function LinksPage() {
   const [data, setData] = useState<Dashboard | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [destSearch, setDestSearch] = useState('')
 
   const [newOpen, setNewOpen] = useState(sp.get('new') === '1')
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -28,18 +30,12 @@ export function LinksPage() {
     setError(null)
     try {
       const q = new URLSearchParams()
-      if (platform) q.set('platform', platform)
+      if (platform && platform !== 'all') q.set('platform', platform)
       if (account) q.set('account', account)
-      if (preset && preset !== 'custom') q.set('preset', preset === 'all' ? '' : preset)
-      if (preset === 'all') {
-        /* default */
-      } else if (preset) q.set('preset', preset)
+      if (destination && destination !== 'all') q.set('destination', destination)
+      if (preset && preset !== 'all') q.set('preset', preset)
       if (sort) q.set('sort', sort)
       if (order) q.set('order', order)
-      ;[...q.keys()].forEach((k) => {
-        if (!q.get(k)) q.delete(k)
-      })
-      if (preset && preset !== 'all') q.set('preset', preset)
       const dash = await api<Dashboard>(`/admin/api/dashboard?${q.toString()}`)
       setData(dash)
     } catch (e) {
@@ -47,7 +43,7 @@ export function LinksPage() {
     } finally {
       setLoading(false)
     }
-  }, [platform, account, preset, sort, order])
+  }, [platform, account, destination, preset, sort, order])
 
   useEffect(() => {
     void load()
@@ -57,6 +53,7 @@ export function LinksPage() {
     const merged = {
       platform,
       account,
+      destination,
       preset,
       sort,
       order,
@@ -65,6 +62,7 @@ export function LinksPage() {
     const n = new URLSearchParams()
     if (merged.platform && merged.platform !== 'all') n.set('platform', merged.platform)
     if (merged.account) n.set('account', merged.account)
+    if (merged.destination && merged.destination !== 'all') n.set('destination', merged.destination)
     if (merged.preset && merged.preset !== 'all') n.set('preset', merged.preset)
     if (merged.sort) n.set('sort', merged.sort)
     if (merged.order) n.set('order', merged.order)
@@ -80,6 +78,16 @@ export function LinksPage() {
   }
 
   const exportQs = data?.filter_qs || ''
+
+  const destinationItems = useMemo(() => {
+    const items = data?.destination_filters || []
+    const q = destSearch.trim().toLowerCase()
+    if (!q) return items
+    return items.filter((it) => {
+      if (it.id === 'all') return true
+      return it.name.toLowerCase().includes(q) || it.id.toLowerCase().includes(q)
+    })
+  }, [data?.destination_filters, destSearch])
 
   return (
     <div>
@@ -116,7 +124,50 @@ export function LinksPage() {
       {loading && !data ? <div className="loading">Загрузка…</div> : null}
 
       {data ? (
-        <div className="stack" style={{ marginTop: '1rem' }}>
+        <div className="links-layout">
+          <aside className="sidebar" aria-label="Фильтр по цели">
+            <input
+              className="input"
+              type="search"
+              placeholder="Поиск целей"
+              value={destSearch}
+              onChange={(e) => setDestSearch(e.target.value)}
+              style={{ marginBottom: '0.65rem' }}
+            />
+            <nav className="stack" style={{ gap: '0.15rem', maxHeight: '70vh', overflow: 'auto' }}>
+              {destinationItems.map((it) => {
+                const active =
+                  destination === it.id || (it.id === 'all' && (!destination || destination === 'all'))
+                return (
+                  <button
+                    key={it.id}
+                    type="button"
+                    className={`sidebar-item${active ? ' active' : ''}`}
+                    title={it.id === 'all' ? undefined : it.id}
+                    onClick={() => setFilter({ destination: it.id })}
+                  >
+                    <span
+                      className="ring"
+                      aria-hidden
+                      style={{
+                        background: active ? 'var(--accent)' : 'var(--surface-2)',
+                        color: active ? '#fff' : 'var(--muted)',
+                      }}
+                    >
+                      {it.id === 'all' ? '∗' : (it.name || '?').slice(0, 1).toUpperCase()}
+                    </span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {it.name}
+                    </span>
+                    <span className="sidebar-item__count">{it.count}</span>
+                  </button>
+                )
+              })}
+              {!destinationItems.length ? <p className="muted small">Нет целей</p> : null}
+            </nav>
+          </aside>
+
+          <div className="stack">
             <div className="pills">
               {data.platform_filters.map((pl) => (
                 <button
@@ -224,7 +275,12 @@ export function LinksPage() {
                       </td>
                       <td
                         className="muted small"
-                        style={{ maxWidth: '16rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        style={{
+                          maxWidth: '16rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
                         title={row.destination_url}
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -256,6 +312,7 @@ export function LinksPage() {
                 </tbody>
               </table>
             </div>
+          </div>
         </div>
       ) : null}
 
@@ -286,7 +343,14 @@ export function LinksPage() {
           void load()
         }}
       />
-      <DestModal open={destOpen} onClose={() => setDestOpen(false)} onDone={() => { setDestOpen(false); void load() }} />
+      <DestModal
+        open={destOpen}
+        onClose={() => setDestOpen(false)}
+        onDone={() => {
+          setDestOpen(false)
+          void load()
+        }}
+      />
       <LinkActionsModal
         open={!!actionsLink}
         link={actionsLink}

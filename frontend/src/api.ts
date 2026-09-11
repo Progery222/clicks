@@ -93,10 +93,12 @@ export type Dashboard = {
   links: LinkRow[]
   profiles: Profile[]
   profile_filters: { id: string; name: string; color: string | null; count: number }[]
+  destination_filters: { id: string; name: string; count: number }[]
   platform_filters: { id: string; label: string; color: string | null; count: number }[]
   filter_profile: string
   filter_platform: string
   filter_account: string
+  filter_destination: string
   sort_by: string | null
   sort_order: string | null
   active_preset: string

@@ -1038,6 +1038,7 @@ async def export_links_csv(
     profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
+    destination: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -1047,7 +1048,13 @@ async def export_links_csv(
     earliest = await earliest_link_created_at(db)
     start, end = resolve_stats_period(date_from, date_to, preset, earliest=earliest)
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
-    stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account)
+    stmt = apply_link_filters(
+        stmt,
+        profile=profile,
+        platform=platform,
+        account=account,
+        destination=destination,
+    )
     links = list((await db.execute(stmt)).scalars().all())
     link_ids = [link.id for link in links]
     try:
@@ -1112,6 +1119,7 @@ async def export_clicks_csv(
     profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
+    destination: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -1123,7 +1131,13 @@ async def export_clicks_csv(
     if link_id is not None:
         stmt = stmt.where(Click.link_id == link_id)
     else:
-        stmt = apply_click_link_filters(stmt, profile=profile, platform=platform, account=account)
+        stmt = apply_click_link_filters(
+            stmt,
+            profile=profile,
+            platform=platform,
+            account=account,
+            destination=destination,
+        )
     stmt = stmt.order_by(Click.created_at)
     res = await db.execute(stmt)
     rows = res.scalars().all()
@@ -1173,6 +1187,7 @@ async def export_summary_csv(
     profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
+    destination: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -1196,7 +1211,11 @@ async def export_summary_csv(
         stmt = stmt.where(Click.link_id == link_id)
     else:
         link_ids = apply_link_filters(
-            select(Link.id), profile=profile, platform=platform, account=account
+            select(Link.id),
+            profile=profile,
+            platform=platform,
+            account=account,
+            destination=destination,
         )
         stmt = stmt.where(Click.link_id.in_(link_ids))
     res = await db.execute(stmt)

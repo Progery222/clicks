@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +41,36 @@ def normalize_account_search(raw: str | None) -> str | None:
     return s[:255]
 
 
+def normalize_destination_filter(raw: str | None) -> str | None:
+    s = (raw or "").strip()
+    if not s or s == "all":
+        return None
+    return s[:2048]
+
+
+def destination_display_label(url: str) -> str:
+    """Короткая подпись цели для сайдбара (хост или укороченный URL)."""
+    s = (url or "").strip()
+    if not s:
+        return "—"
+    try:
+        parsed = urlparse(s if "://" in s else f"https://{s}")
+        host = (parsed.netloc or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        path = (parsed.path or "").rstrip("/")
+        if host and (not path or path == ""):
+            return host
+        if host:
+            label = f"{host}{path}"
+            if parsed.query:
+                label = f"{label}?{parsed.query}"
+            return label[:80]
+    except Exception:
+        pass
+    return s if len(s) <= 80 else s[:77] + "…"
+
+
 def account_label_ilike(term: str):
     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     pattern = f"%{escaped}%"
@@ -55,6 +85,7 @@ def build_filter_query(
     platform: str,
     *,
     account: str | None = None,
+    destination: str | None = None,
     preset: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
@@ -69,6 +100,9 @@ def build_filter_query(
     account_term = normalize_account_search(account)
     if account_term:
         params["account"] = account_term
+    dest = normalize_destination_filter(destination)
+    if dest:
+        params["destination"] = dest
     p = (preset or "").strip().lower()
     if p and p not in ("", "all"):
         params["preset"] = p
@@ -91,8 +125,9 @@ def link_filter_predicates(
     profile: str | None,
     platform: str | None,
     account: str | None = None,
+    destination: str | None = None,
 ) -> list:
-    """Условия WHERE для фильтра профиля/платформы/аккаунта (select и delete)."""
+    """Условия WHERE для фильтра профиля/платформы/аккаунта/цели (select и delete)."""
     preds: list = []
     if profile == "none":
         preds.append(Link.profile_id.is_(None))
@@ -107,6 +142,9 @@ def link_filter_predicates(
     account_term = normalize_account_search(account)
     if account_term:
         preds.append(account_label_ilike(account_term))
+    dest = normalize_destination_filter(destination)
+    if dest:
+        preds.append(Link.destination_url == dest)
     return preds
 
 
@@ -116,8 +154,9 @@ def apply_link_filters(
     profile: str | None,
     platform: str | None,
     account: str | None = None,
+    destination: str | None = None,
 ) -> Select[tuple[Link]]:
-    for pred in link_filter_predicates(profile, platform, account):
+    for pred in link_filter_predicates(profile, platform, account, destination):
         stmt = stmt.where(pred)
     return stmt
 
@@ -181,9 +220,19 @@ def resolve_stats_period(
     return parse_range(date_from, date_to)
 
 
-def apply_click_link_filters(stmt, profile: str, platform: str, account: str | None = None):
+def apply_click_link_filters(
+    stmt,
+    profile: str,
+    platform: str,
+    account: str | None = None,
+    destination: str | None = None,
+):
     link_ids = apply_link_filters(
-        select(Link.id), profile=profile, platform=platform, account=account
+        select(Link.id),
+        profile=profile,
+        platform=platform,
+        account=account,
+        destination=destination,
     )
     return stmt.where(Click.link_id.in_(link_ids))
 
@@ -203,3 +252,28 @@ async def platform_link_counts(db: AsyncSession) -> dict[str, int]:
             counts["none"] = n
     counts["all"] = total
     return counts
+
+
+async def destination_link_filters(db: AsyncSession) -> list[dict]:
+    """Группы целей для сайдбара: Все + уникальные destination_url со счётчиками."""
+    rows = (
+        await db.execute(
+            select(Link.destination_url, func.count())
+            .group_by(Link.destination_url)
+            .order_by(func.count().desc(), Link.destination_url.asc())
+        )
+    ).all()
+    items: list[dict] = []
+    total = 0
+    for url, cnt in rows:
+        n = int(cnt)
+        total += n
+        raw = str(url)
+        items.append(
+            {
+                "id": raw,
+                "name": destination_display_label(raw),
+                "count": n,
+            }
+        )
+    return [{"id": "all", "name": "Все цели", "count": total}, *items]

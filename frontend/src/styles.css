@@ -500,6 +500,9 @@ textarea {
   border-radius: var(--radius);
   background: var(--surface);
   padding: 0.85rem;
+  align-self: start;
+  position: sticky;
+  top: calc(var(--header-h, 3.5rem) + 0.75rem);
 }
 
 .sidebar-item {

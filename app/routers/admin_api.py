@@ -17,6 +17,7 @@ from app.admin_dashboard import load_dashboard_page_data
 from app.admin_helpers import (
     apply_link_filters,
     cached_sidebar_link_counts,
+    destination_link_filters,
     earliest_link_created_at,
     load_profiles,
     parse_profile_id,
@@ -235,6 +236,7 @@ async def dashboard_json(
     profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
+    destination: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
     preset: str | None = Query(None),
@@ -248,6 +250,7 @@ async def dashboard_json(
             profile=profile,
             platform=platform,
             account=account,
+            destination=destination,
             date_from=date_from,
             date_to=date_to,
             preset=preset,
@@ -260,6 +263,7 @@ async def dashboard_json(
 
     profiles = await load_profiles(db)
     prof_counts, plat_counts = await cached_sidebar_link_counts(db)
+    destination_filters = await destination_link_filters(db)
 
     profile_filters = [
         {"id": "all", "name": "Все профили", "color": None, "count": prof_counts.get("all", 0)},
@@ -300,11 +304,13 @@ async def dashboard_json(
             "links": [_serialize_link_row(r) for r in dash["link_rows"]],
             "profiles": [_serialize_profile(p) for p in profiles],
             "profile_filters": profile_filters,
+            "destination_filters": destination_filters,
             "platform_filters": platform_filters,
             "platforms": PLATFORMS,
             "filter_profile": dash["filter_profile"],
             "filter_platform": dash["filter_platform"],
             "filter_account": dash["filter_account"],
+            "filter_destination": dash["filter_destination"],
             "sort_by": dash.get("sort_by"),
             "sort_order": dash.get("sort_order"),
             "active_preset": dash["active_preset"],

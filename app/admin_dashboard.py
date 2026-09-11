@@ -45,6 +45,7 @@ def admin_filter_href_for(
     platform: str,
     *,
     account: str | None = None,
+    destination: str | None = None,
     active_preset: str,
     period_from: str,
     period_to: str,
@@ -55,6 +56,7 @@ def admin_filter_href_for(
         profile,
         platform,
         account=account,
+        destination=destination,
         sort=sort,
         order=order,
         **_period_query_kwargs(active_preset, period_from, period_to),
@@ -66,6 +68,7 @@ def export_qs_for(
     platform: str,
     *,
     account: str | None = None,
+    destination: str | None = None,
     active_preset: str,
     period_from: str,
     period_to: str,
@@ -76,6 +79,7 @@ def export_qs_for(
         profile,
         platform,
         account=account,
+        destination=destination,
         sort=sort,
         order=order,
         **_period_query_kwargs(active_preset, period_from, period_to),
@@ -87,6 +91,7 @@ def sort_column_href_for(
     platform: str,
     *,
     account: str | None = None,
+    destination: str | None = None,
     active_preset: str,
     period_from: str,
     period_to: str,
@@ -102,6 +107,7 @@ def sort_column_href_for(
         profile,
         platform,
         account=account,
+        destination=destination,
         sort=column,
         order=next_order,
         **_period_query_kwargs(active_preset, period_from, period_to),
@@ -134,6 +140,7 @@ async def load_dashboard_page_data(
     profile: str,
     platform: str,
     account: str | None = None,
+    destination: str | None = None,
     date_from: str | None,
     date_to: str | None,
     preset: str | None,
@@ -143,8 +150,17 @@ async def load_dashboard_page_data(
     sort_by = normalize_table_sort(sort)
     sort_order = normalize_table_order(order, sort=sort_by)
     account_term = (account or "").strip()
+    dest_term = (destination or "").strip()
+    if dest_term == "all":
+        dest_term = ""
     stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
-    stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account_term)
+    stmt = apply_link_filters(
+        stmt,
+        profile=profile,
+        platform=platform,
+        account=account_term,
+        destination=dest_term or None,
+    )
     links = list((await db.execute(stmt)).scalars().all())
     link_ids = [link.id for link in links]
 
@@ -239,6 +255,7 @@ async def load_dashboard_page_data(
         profile,
         platform,
         account=account_term or None,
+        destination=dest_term or None,
         active_preset=active,
         period_from=period_from,
         period_to=period_to,
@@ -251,6 +268,7 @@ async def load_dashboard_page_data(
             profile,
             platform,
             account=account_term or None,
+            destination=dest_term or None,
             preset="today",
             sort=sort_by,
             order=sort_order,
@@ -260,6 +278,7 @@ async def load_dashboard_page_data(
             profile,
             platform,
             account=account_term or None,
+            destination=dest_term or None,
             preset="week",
             sort=sort_by,
             order=sort_order,
@@ -269,6 +288,7 @@ async def load_dashboard_page_data(
             profile,
             platform,
             account=account_term or None,
+            destination=dest_term or None,
             sort=sort_by,
             order=sort_order,
         ),
@@ -281,6 +301,7 @@ async def load_dashboard_page_data(
         "filter_profile": profile,
         "filter_platform": platform,
         "filter_account": account_term,
+        "filter_destination": dest_term or "all",
         "filter_qs": filter_qs,
         "period_hrefs": period_hrefs,
         "active_preset": active,
@@ -294,6 +315,7 @@ async def load_dashboard_page_data(
             prof,
             plat,
             account=account_term or None,
+            destination=dest_term or None,
             active_preset=active,
             period_from=period_from,
             period_to=period_to,
@@ -304,6 +326,7 @@ async def load_dashboard_page_data(
             profile,
             platform,
             account=account_term or None,
+            destination=dest_term or None,
             active_preset=active,
             period_from=period_from,
             period_to=period_to,
