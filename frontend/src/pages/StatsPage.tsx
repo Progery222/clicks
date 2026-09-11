@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type LinkStats } from '../api'
-import { Avatar, BarChart, Modal } from '../components'
+import { Avatar, BarChart, Modal, PeriodFilter } from '../components'
 
 export function StatsPage() {
   const { linkId = '' } = useParams()
@@ -84,27 +84,15 @@ export function StatsPage() {
         </div>
       </div>
 
-      <div className="pills">
-        {(
-          [
-            ['today', 'Сегодня'],
-            ['week', 'Неделя'],
-            ['all', 'Всё время'],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`pill${preset === id ? ' active' : ''}`}
-            onClick={() => {
-              const n = new URLSearchParams()
-              if (id !== 'all') n.set('preset', id)
-              setSp(n, { replace: true })
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="filter-bar">
+        <PeriodFilter
+          value={preset}
+          onChange={(id) => {
+            const n = new URLSearchParams()
+            if (id !== 'all') n.set('preset', id)
+            setSp(n, { replace: true })
+          }}
+        />
       </div>
 
       <div className="kpi-grid">

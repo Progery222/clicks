@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Indicators } from '../api'
-import { BarChart, Modal } from '../components'
+import { BarChart, Modal, PeriodFilter, PlatformFilter } from '../components'
 
 export function IndicatorsPage() {
   const [sp, setSp] = useSearchParams()
@@ -68,36 +68,13 @@ export function IndicatorsPage() {
       </div>
 
       <div className="stack" style={{ marginTop: '1rem' }}>
-        <div className="pills">
-          {data.platform_filters.map((pl) => (
-            <button
-              key={pl.id}
-              type="button"
-              className={`pill${platform === pl.id ? ' active' : ''}`}
-              onClick={() => setFilter({ platform: pl.id })}
-            >
-              {pl.color ? <span className="pill__dot" style={{ background: pl.color }} /> : null}
-              {pl.label}
-            </button>
-          ))}
-        </div>
-        <div className="pills">
-          {(
-            [
-              ['today', 'Сегодня'],
-              ['week', 'Неделя'],
-              ['all', 'Всё время'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={`pill${preset === id ? ' active' : ''}`}
-              onClick={() => setFilter({ preset: id })}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="filter-bar">
+          <PlatformFilter
+            options={data.platform_filters}
+            value={platform}
+            onChange={(next) => setFilter({ platform: next })}
+          />
+          <PeriodFilter value={preset} onChange={(next) => setFilter({ preset: next })} />
         </div>
         <div className="kpi-grid">
           <div className="kpi-card">

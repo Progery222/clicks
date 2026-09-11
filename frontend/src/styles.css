@@ -331,6 +331,90 @@ textarea {
   gap: 0.4rem;
 }
 
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.filter-dd {
+  position: relative;
+}
+
+.filter-dd__btn {
+  gap: 0.45rem;
+  min-width: 8.5rem;
+  justify-content: space-between;
+  font-weight: 500;
+}
+
+.filter-dd__btn--active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+  color: var(--text);
+}
+
+.filter-dd__chev {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  line-height: 1;
+}
+
+.filter-dd.is-open .filter-dd__chev {
+  transform: rotate(180deg);
+}
+
+.filter-dd__menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  min-width: 14rem;
+  max-height: min(22rem, 70vh);
+  overflow: auto;
+  padding: 0.4rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: 0 10px 28px color-mix(in srgb, #000 18%, transparent);
+}
+
+.filter-dd__sep {
+  height: 1px;
+  margin: 0.25rem 0.35rem;
+  background: var(--border);
+}
+
+.filter-dd__option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filter-dd__option:hover,
+.filter-dd__option.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.filter-dd__option input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.filter-dd__option--btn {
+  justify-content: flex-start;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

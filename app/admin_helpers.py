@@ -149,12 +149,29 @@ def link_filter_predicates(
     account: str | None = None,
     destination: str | None = None,
 ) -> list:
-    """Условия WHERE для фильтра платформы/аккаунта/цели (select и delete)."""
+    """Условия WHERE для фильтра платформы/аккаунта/цели (select и delete).
+
+    platform: ``all`` / пусто — без фильтра; одно значение; или список через запятую
+    (``tiktok,instagram,none``).
+    """
     preds: list = []
-    if platform == "none":
-        preds.append(Link.platform.is_(None))
-    elif platform and platform != "all":
-        preds.append(Link.platform == platform)
+    raw = (platform or "").strip()
+    if raw and raw != "all":
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        # Уникальные с сохранением порядка
+        parts = list(dict.fromkeys(parts))
+        if parts and parts != ["all"]:
+            include_none = "none" in parts
+            named = [p for p in parts if p != "none" and p != "all"]
+            if include_none and named:
+                preds.append(or_(Link.platform.is_(None), Link.platform.in_(named)))
+            elif include_none:
+                preds.append(Link.platform.is_(None))
+            elif named:
+                if len(named) == 1:
+                    preds.append(Link.platform == named[0])
+                else:
+                    preds.append(Link.platform.in_(named))
     account_term = normalize_account_search(account)
     if account_term:
         preds.append(account_label_ilike(account_term))

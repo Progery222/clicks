@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useAuth } from './auth'
 
 function IconMoon() {
@@ -167,6 +167,177 @@ export function BarChart({ items, limit = 8 }: { items: { label: string; count: 
         <button type="button" className="btn btn-ghost" onClick={() => setShowAll((v) => !v)}>
           {showAll ? 'Свернуть' : 'Смотреть все'}
         </button>
+      ) : null}
+    </div>
+  )
+}
+
+export function PlatformFilter({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: string; label: string; color: string | null }[]
+  /** ``all`` или id через запятую */
+  value: string
+  onChange: (next: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const items = useMemo(() => options.filter((o) => o.id !== 'all'), [options])
+  const allIds = useMemo(() => items.map((o) => o.id), [items])
+
+  const selected = useMemo(() => {
+    if (!value || value === 'all') return new Set(allIds)
+    return new Set(value.split(',').map((s) => s.trim()).filter(Boolean))
+  }, [value, allIds])
+
+  const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id))
+  const selectedCount = allSelected ? allIds.length : [...selected].filter((id) => allIds.includes(id)).length
+
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  function commit(next: Set<string>) {
+    const ids = allIds.filter((id) => next.has(id))
+    if (!ids.length || ids.length === allIds.length) onChange('all')
+    else onChange(ids.join(','))
+  }
+
+  function toggleAll() {
+    if (allSelected) commit(new Set())
+    else commit(new Set(allIds))
+  }
+
+  function toggleOne(id: string) {
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    commit(next)
+  }
+
+  const label = allSelected
+    ? 'Платформа'
+    : selectedCount === 1
+      ? items.find((o) => selected.has(o.id))?.label || 'Платформа'
+      : `Платформа · ${selectedCount}`
+
+  return (
+    <div className={`filter-dd${open ? ' is-open' : ''}`} ref={rootRef}>
+      <button
+        type="button"
+        className={`btn filter-dd__btn${allSelected ? '' : ' filter-dd__btn--active'}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>{label}</span>
+        <span className="filter-dd__chev" aria-hidden>
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <div className="filter-dd__menu" role="listbox" aria-multiselectable="true">
+          <label className="filter-dd__option">
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+            <span>Все</span>
+          </label>
+          <div className="filter-dd__sep" />
+          {items.map((o) => (
+            <label key={o.id} className="filter-dd__option">
+              <input
+                type="checkbox"
+                checked={selected.has(o.id)}
+                onChange={() => toggleOne(o.id)}
+              />
+              {o.color ? <span className="pill__dot" style={{ background: o.color }} /> : null}
+              <span>{o.label}</span>
+            </label>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+const PERIOD_OPTIONS = [
+  { id: 'today', label: 'Сегодня' },
+  { id: 'week', label: 'Неделя' },
+  { id: 'all', label: 'Всё время' },
+] as const
+
+export function PeriodFilter({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (next: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const current = PERIOD_OPTIONS.find((o) => o.id === value) || PERIOD_OPTIONS[2]
+
+  useEffect(() => {
+    if (!open) return
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div className={`filter-dd${open ? ' is-open' : ''}`} ref={rootRef}>
+      <button
+        type="button"
+        className="btn filter-dd__btn"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>{current.label}</span>
+        <span className="filter-dd__chev" aria-hidden>
+          ▾
+        </span>
+      </button>
+      {open ? (
+        <div className="filter-dd__menu" role="listbox">
+          {PERIOD_OPTIONS.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              role="option"
+              aria-selected={o.id === current.id}
+              className={`filter-dd__option filter-dd__option--btn${o.id === current.id ? ' is-active' : ''}`}
+              onClick={() => {
+                onChange(o.id)
+                setOpen(false)
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
       ) : null}
     </div>
   )
