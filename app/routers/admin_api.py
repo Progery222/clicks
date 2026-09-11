@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.admin_dashboard import load_dashboard_page_data
 from app.admin_helpers import (
     apply_link_filters,
-    cached_sidebar_link_counts,
+    cached_platform_link_counts,
     destination_icons,
     destination_link_filters,
     destination_site_icon_url,
@@ -245,7 +245,6 @@ async def auth_logout(request: Request) -> JSONResponse:
 async def dashboard_json(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
     destination: str | None = Query(None),
@@ -259,7 +258,6 @@ async def dashboard_json(
     try:
         dash = await load_dashboard_page_data(
             db,
-            profile=profile,
             platform=platform,
             account=account,
             destination=destination,
@@ -273,7 +271,7 @@ async def dashboard_json(
         log.exception("dashboard_json failed")
         raise HTTPException(status_code=500, detail="Dashboard load failed") from None
 
-    _, plat_counts = await cached_sidebar_link_counts(db)
+    plat_counts = await cached_platform_link_counts(db)
     destination_filters = await destination_link_filters(db)
 
     platform_filters = [
@@ -588,7 +586,6 @@ async def link_stats_json(
 async def indicators_json(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
     platform: str = Query("all"),
     date_from: str | None = Query(None, alias="from"),
     date_to: str | None = Query(None, alias="to"),
@@ -600,7 +597,7 @@ async def indicators_json(
     start, end = resolve_stats_period(date_from, date_to, preset, earliest=earliest)
     period_from, period_to = form_period_dates(start, end)
 
-    id_stmt = apply_link_filters(select(Link.id), profile=profile, platform=platform)
+    id_stmt = apply_link_filters(select(Link.id), platform=platform)
     link_ids = [row[0] for row in (await db.execute(id_stmt)).all()]
     period_total, period_uniques = await aggregate_clicks_for_links(db, link_ids, start, end)
     os_rows = await top_os_for_links(db, link_ids, start, end)

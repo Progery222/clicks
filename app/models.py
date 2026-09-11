@@ -10,27 +10,6 @@ class Base(DeclarativeBase):
     pass
 
 
-class Profile(Base):
-    __tablename__ = "profiles"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    color: Mapped[str] = mapped_column(String(7), nullable=False, default="#6366f1")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=lambda: datetime.now(UTC),
-        nullable=False,
-    )
-
-    links: Mapped[list["Link"]] = relationship(back_populates="profile")
-
-
 class Link(Base):
     __tablename__ = "links"
 
@@ -47,12 +26,6 @@ class Link(Base):
         String(16), nullable=False, default="auto", server_default="auto"
     )
     platform: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
-    profile_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("profiles.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -64,7 +37,6 @@ class Link(Base):
     )
 
     clicks: Mapped[list["Click"]] = relationship(back_populates="link")
-    profile: Mapped["Profile | None"] = relationship(back_populates="links")
 
 
 class Click(Base):

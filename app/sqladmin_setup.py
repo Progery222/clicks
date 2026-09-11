@@ -55,7 +55,7 @@ class LinkAdmin(ModelView, model=Link):
     ]
     column_searchable_list = [Link.slug, Link.title, Link.label, Link.destination_url]
     column_sortable_list = [Link.slug, Link.created_at, Link.platform]
-    form_excluded_columns = [Link.clicks, Link.profile, Link.profile_id]
+    form_excluded_columns = [Link.clicks]
 
 
 class ClickAdmin(ModelView, model=Click):

@@ -13,7 +13,7 @@ _EARLIEST_LINK_TTL_SEC = 300.0
 
 _dashboard_counts_cache: tuple[float, dict[uuid.UUID, tuple[int, int]]] | None = None
 _period_counts_cache: dict[tuple, tuple[float, dict[uuid.UUID, tuple[int, int]]]] = {}
-_sidebar_counts_cache: tuple[float, tuple[dict[str, int], dict[str, int]]] | None = None
+_sidebar_counts_cache: tuple[float, dict[str, int]] | None = None
 _earliest_link_cache: tuple[float, datetime | None] | None = None
 
 
@@ -84,7 +84,7 @@ def set_cached_period_counts(
         _period_counts_cache.pop(oldest[0], None)
 
 
-def get_cached_sidebar_counts() -> tuple[dict[str, int], dict[str, int]] | None:
+def get_cached_sidebar_counts() -> dict[str, int] | None:
     global _sidebar_counts_cache
     if _sidebar_counts_cache is None:
         return None
@@ -94,14 +94,9 @@ def get_cached_sidebar_counts() -> tuple[dict[str, int], dict[str, int]] | None:
     return data
 
 
-def set_cached_sidebar_counts(
-    profile_counts: dict[str, int], platform_counts: dict[str, int]
-) -> None:
+def set_cached_sidebar_counts(platform_counts: dict[str, int]) -> None:
     global _sidebar_counts_cache
-    _sidebar_counts_cache = (
-        time.monotonic(),
-        (dict(profile_counts), dict(platform_counts)),
-    )
+    _sidebar_counts_cache = (time.monotonic(), dict(platform_counts))
 
 
 def invalidate_sidebar_counts_cache() -> None:

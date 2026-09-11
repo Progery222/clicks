@@ -1,8 +1,6 @@
-"""Обновление полей ссылки: платформа из аккаунта, профиль."""
+"""Обновление полей ссылки: платформа из аккаунта."""
 
 from __future__ import annotations
-
-import uuid
 
 from app.models import Link
 from app.platforms import detect_platform_from_text
@@ -48,6 +46,3 @@ def apply_link_label(link: Link, label: str | None) -> None:
     """Один или несколько аккаунтов (строка / запятая) — храним через перевод строки."""
     apply_link_accounts(link, parse_label_lines(label or ""))
 
-
-def apply_link_profile(link: Link, profile_id: uuid.UUID | None) -> None:
-    link.profile_id = profile_id

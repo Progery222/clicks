@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,7 +38,6 @@ def _period_query_kwargs(active_preset: str, period_from: str, period_to: str) -
 
 
 def admin_filter_href_for(
-    profile: str,
     platform: str,
     *,
     account: str | None = None,
@@ -52,7 +49,6 @@ def admin_filter_href_for(
     order: str | None = None,
 ) -> str:
     return "/admin" + build_filter_query(
-        profile,
         platform,
         account=account,
         destination=destination,
@@ -63,7 +59,6 @@ def admin_filter_href_for(
 
 
 def export_qs_for(
-    profile: str,
     platform: str,
     *,
     account: str | None = None,
@@ -75,7 +70,6 @@ def export_qs_for(
     order: str | None = None,
 ) -> str:
     return build_filter_query(
-        profile,
         platform,
         account=account,
         destination=destination,
@@ -86,7 +80,6 @@ def export_qs_for(
 
 
 def sort_column_href_for(
-    profile: str,
     platform: str,
     *,
     account: str | None = None,
@@ -103,7 +96,6 @@ def sort_column_href_for(
     else:
         next_order = "desc"
     return "/admin" + build_filter_query(
-        profile,
         platform,
         account=account,
         destination=destination,
@@ -136,7 +128,6 @@ def sort_link_rows(
 async def load_dashboard_page_data(
     db: AsyncSession,
     *,
-    profile: str,
     platform: str,
     account: str | None = None,
     destination: str | None = None,
@@ -155,7 +146,6 @@ async def load_dashboard_page_data(
     stmt = select(Link).order_by(Link.created_at.desc())
     stmt = apply_link_filters(
         stmt,
-        profile=profile,
         platform=platform,
         account=account_term,
         destination=dest_term or None,
@@ -251,7 +241,6 @@ async def load_dashboard_page_data(
     link_rows = sort_link_rows(link_rows, sort=sort_by, order=sort_order)
 
     filter_qs = export_qs_for(
-        profile,
         platform,
         account=account_term or None,
         destination=dest_term or None,
@@ -264,7 +253,6 @@ async def load_dashboard_page_data(
     period_hrefs = {
         "today": "/admin"
         + build_filter_query(
-            profile,
             platform,
             account=account_term or None,
             destination=dest_term or None,
@@ -274,7 +262,6 @@ async def load_dashboard_page_data(
         ),
         "week": "/admin"
         + build_filter_query(
-            profile,
             platform,
             account=account_term or None,
             destination=dest_term or None,
@@ -284,7 +271,6 @@ async def load_dashboard_page_data(
         ),
         "all": "/admin"
         + build_filter_query(
-            profile,
             platform,
             account=account_term or None,
             destination=dest_term or None,
@@ -297,7 +283,6 @@ async def load_dashboard_page_data(
         "link_rows": link_rows,
         "sort_by": sort_by,
         "sort_order": sort_order,
-        "filter_profile": profile,
         "filter_platform": platform,
         "filter_account": account_term,
         "filter_destination": dest_term or "all",
@@ -310,8 +295,7 @@ async def load_dashboard_page_data(
         "period_total": period_total,
         "period_uniques": period_uniques,
         "platform_stats": platform_stats,
-        "admin_filter_href": lambda prof, plat: admin_filter_href_for(
-            prof,
+        "admin_filter_href": lambda plat: admin_filter_href_for(
             plat,
             account=account_term or None,
             destination=dest_term or None,
@@ -322,7 +306,6 @@ async def load_dashboard_page_data(
             order=sort_order,
         ),
         "sort_href": lambda col: sort_column_href_for(
-            profile,
             platform,
             account=account_term or None,
             destination=dest_term or None,

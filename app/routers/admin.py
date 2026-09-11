@@ -8,7 +8,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.admin_helpers import (
     apply_click_link_filters,
@@ -54,14 +53,9 @@ from app.services.stats import (
     top_countries,
     top_device_types,
     top_os,
-    top_referers,
-    top_user_agents,
 )
 from app.services.stats_cache import invalidate_dashboard_counts_cache
-from app.stats_range import (
-    dashboard_stats_range,
-    stats_range,
-)
+from app.stats_range import stats_range
 from app.utils.csv_import import MAX_IMPORT_BYTES, parse_links_import_csv
 from app.utils.slug import random_slug
 from app.url_validation import is_valid_destination_url
@@ -263,72 +257,7 @@ async def dashboard(request: Request):
     return spa_index_response()
 
 
-@router.get("/api/link-counts")
-async def api_link_counts(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
-    platform: str = Query("all"),
-    account: str | None = Query(None),
-    date_from: str | None = Query(None, alias="from"),
-    date_to: str | None = Query(None, alias="to"),
-    preset: str | None = Query(None),
-) -> JSONResponse:
-    """Счётчики по ссылкам для polling: всего, сегодня UTC, за выбранный период."""
-    _require_admin(request)
-    stmt = select(Link.id)
-    stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account)
-    link_ids = list((await db.execute(stmt)).scalars().all())
-    earliest = await earliest_link_created_at(db)
-    start, end = dashboard_stats_range(date_from, date_to, preset, earliest=earliest)
-    try:
-        all_time = await dashboard_click_counts(db)
-    except Exception:
-        log.exception("api_link_counts: dashboard_click_counts failed")
-        all_time = {}
-    try:
-        period_map = await click_counts_for_links_period(db, link_ids, start, end)
-    except Exception:
-        period_map = {}
-    payload = {}
-    for lid in link_ids:
-        t, d = all_time.get(lid, (0, 0))
-        pc, pu = period_map.get(lid, (0, 0))
-        payload[str(lid)] = {"total": t, "today": d, "period": pc, "period_uniques": pu}
-    return JSONResponse({"counts": payload})
 
-
-@router.get("/api/traffic-insights")
-async def api_traffic_insights(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
-    platform: str = Query("all"),
-    account: str | None = Query(None),
-    date_from: str | None = Query(None, alias="from"),
-    date_to: str | None = Query(None, alias="to"),
-    preset: str | None = Query(None),
-) -> JSONResponse:
-    """Топ referer и user-agent за период (для модалки на /admin)."""
-    _require_admin(request)
-    stmt = select(Link.id)
-    stmt = apply_link_filters(stmt, profile=profile, platform=platform, account=account)
-    link_ids = list((await db.execute(stmt)).scalars().all())
-    earliest_row = await db.execute(select(func.min(Link.created_at)))
-    earliest = earliest_row.scalar_one_or_none()
-    start, end = dashboard_stats_range(date_from, date_to, preset, earliest=earliest)
-    try:
-        referers = await top_referers(db, link_ids, start, end)
-        user_agents = await top_user_agents(db, link_ids, start, end)
-    except Exception:
-        log.exception("api_traffic_insights failed")
-        referers, user_agents = [], []
-    return JSONResponse(
-        {
-            "referers": [{"label": label, "count": cnt} for label, cnt in referers],
-            "user_agents": [{"label": label, "count": cnt} for label, cnt in user_agents],
-        }
-    )
 
 
 def _valid_url(url: str) -> bool:
@@ -487,19 +416,19 @@ async def link_delete(
 async def links_delete_all(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
 ) -> RedirectResponse:
-    """Удалить все ссылки, попадающие под текущие фильтры профиля и платформы."""
+    """Удалить все ссылки, попадающие под текущие фильтры платформы/аккаунта."""
     _require_admin(request)
     stmt = delete(Link)
-    for pred in link_filter_predicates(profile, platform, account):
+    for pred in link_filter_predicates(platform, account):
         stmt = stmt.where(pred)
     await db.execute(stmt)
     await db.commit()
     return RedirectResponse(
-        "/admin" + build_filter_query(profile, platform, account=account), status_code=302
+        "/admin" + build_filter_query(
+            platform, account=account), status_code=302
     )
 
 
@@ -507,7 +436,6 @@ async def links_delete_all(
 async def clear_all_link_clicks(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
     date_from: str | None = Query(None, alias="from"),
@@ -519,14 +447,13 @@ async def clear_all_link_clicks(
     """Удалить записи кликов по ссылкам из текущих фильтров (сами ссылки остаются)."""
     _require_admin(request)
     stmt = delete(Click)
-    stmt = apply_click_link_filters(stmt, profile=profile, platform=platform, account=account)
+    stmt = apply_click_link_filters(stmt, platform=platform, account=account)
     await db.execute(stmt)
     await db.commit()
     invalidate_dashboard_counts_cache()
     return RedirectResponse(
         "/admin"
         + build_filter_query(
-            profile,
             platform,
             account=account,
             preset=preset,
@@ -618,7 +545,6 @@ async def admin_indicators_alias():
 async def export_links_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
     destination: str | None = Query(None),
@@ -630,10 +556,9 @@ async def export_links_csv(
     _require_admin(request)
     earliest = await earliest_link_created_at(db)
     start, end = resolve_stats_period(date_from, date_to, preset, earliest=earliest)
-    stmt = select(Link).options(selectinload(Link.profile)).order_by(Link.created_at.desc())
+    stmt = select(Link).order_by(Link.created_at.desc())
     stmt = apply_link_filters(
         stmt,
-        profile=profile,
         platform=platform,
         account=account,
         destination=destination,
@@ -659,7 +584,6 @@ async def export_links_csv(
                 str(link.id),
                 link.slug,
                 f"{base}/r/{link.slug}",
-                link.profile.name if link.profile else "",
                 platform_label(link.platform) if link.platform else "",
                 link.platform or "",
                 link.label or "",
@@ -675,7 +599,6 @@ async def export_links_csv(
         "id",
         "slug",
         "short_url",
-        "profile",
         "platform_label",
         "platform",
         "account",
@@ -699,7 +622,6 @@ async def export_clicks_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
     link_id: uuid.UUID | None = Query(None),
-    profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
     destination: str | None = Query(None),
@@ -716,7 +638,6 @@ async def export_clicks_csv(
     else:
         stmt = apply_click_link_filters(
             stmt,
-            profile=profile,
             platform=platform,
             account=account,
             destination=destination,
@@ -767,7 +688,6 @@ async def export_summary_csv(
     request: Request,
     db: AsyncSession = Depends(get_db),
     link_id: uuid.UUID | None = Query(None),
-    profile: str = Query("all"),
     platform: str = Query("all"),
     account: str | None = Query(None),
     destination: str | None = Query(None),
@@ -795,7 +715,6 @@ async def export_summary_csv(
     else:
         link_ids = apply_link_filters(
             select(Link.id),
-            profile=profile,
             platform=platform,
             account=account,
             destination=destination,
