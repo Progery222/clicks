@@ -221,7 +221,7 @@ export function LinksPage() {
               onChange={(e) => setDestSearch(e.target.value)}
               style={{ marginBottom: '0.65rem' }}
             />
-            <nav className="stack" style={{ gap: '0.15rem', maxHeight: '70vh', overflow: 'auto' }}>
+            <nav className="stack sidebar-scroll" style={{ gap: '0.15rem', maxHeight: '70vh', overflow: 'auto' }}>
               {destinationItems.map((it) => {
                 const active =
                   destination === it.id || (it.id === 'all' && (!destination || destination === 'all'))
