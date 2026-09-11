@@ -597,8 +597,14 @@ function BulkModal({
           <input className="input" name="destination_url" type="url" required />
         </label>
         <label className="field-label">
-          Аккаунты (по одному на строку)
-          <textarea className="input textarea" name="labels" required />
+          Аккаунты
+          <textarea
+            className="input textarea"
+            name="labels"
+            required
+            placeholder="По одному на строку или через запятую"
+          />
+          <span className="muted small">Каждый аккаунт — отдельная ссылка. Разделитель: новая строка или запятая</span>
         </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Создать
