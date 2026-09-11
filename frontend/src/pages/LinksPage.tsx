@@ -217,9 +217,9 @@ export function LinksPage() {
                         )}
                       </td>
                       <td>
-                        <span className="row" style={{ gap: '0.45rem' }}>
+                        <span className="row" style={{ gap: '0.45rem', alignItems: 'flex-start' }}>
                           <Avatar url={row.account_avatar_url} name={row.account_display} />
-                          <span>{row.account_display}</span>
+                          <span style={{ whiteSpace: 'pre-line' }}>{row.account_display}</span>
                         </span>
                       </td>
                       <td
@@ -422,7 +422,13 @@ function EditLinkModal({
         </label>
         <label className="field-label">
           С какого аккаунта(ов)
-          <input className="input" name="label" defaultValue={link.label || ''} />
+          <textarea
+            className="input textarea"
+            name="label"
+            defaultValue={link.label || ''}
+            rows={3}
+            placeholder="По одному на строку"
+          />
         </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
           Сохранить
@@ -478,7 +484,12 @@ function NewLinkModal({
         </label>
         <label className="field-label">
           С какого аккаунта(ов)
-          <input className="input" name="label" />
+          <textarea
+            className="input textarea"
+            name="label"
+            rows={3}
+            placeholder="По одному на строку"
+          />
         </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Создать

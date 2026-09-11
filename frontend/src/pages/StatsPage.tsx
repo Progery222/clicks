@@ -214,7 +214,13 @@ function EditLinkModal({
         </label>
         <label className="field-label">
           С какого аккаунта(ов)
-          <input className="input" name="label" defaultValue={link.label || ''} />
+          <textarea
+            className="input textarea"
+            name="label"
+            defaultValue={link.label || ''}
+            rows={3}
+            placeholder="По одному на строку"
+          />
         </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
           Сохранить

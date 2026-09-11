@@ -92,9 +92,24 @@ def normalize_account_label(text: str | None) -> str | None:
 
 
 def account_label_display(text: str | None) -> str | None:
-    """Короткая подпись аккаунта для админки (username без URL/префикса платформы)."""
+    """Короткая подпись аккаунта для админки (username без URL/префикса платформы).
+
+    Несколько аккаунтов (через перевод строки / запятую) — через « · ».
+    """
     if text is None:
         return None
+    s = str(text).strip()
+    if not s:
+        return None
+    parts = [p.strip() for p in re.split(r"[\n,;]+", s) if p.strip()]
+    if len(parts) > 1:
+        shown = [_single_account_display(p) for p in parts]
+        shown = [x for x in shown if x]
+        return "\n".join(shown) if shown else None
+    return _single_account_display(s)
+
+
+def _single_account_display(text: str) -> str | None:
     s = str(text).strip()
     if not s:
         return None
