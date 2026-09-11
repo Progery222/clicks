@@ -38,9 +38,6 @@ export function Shell({ children }: { children: ReactNode }) {
           <NavLink to="/indicators" onClick={() => setMenuOpen(false)}>
             Показатели
           </NavLink>
-          <NavLink to="/admin/profiles" onClick={() => setMenuOpen(false)}>
-            Профили
-          </NavLink>
         </nav>
         <div className="topbar__actions">
           <button type="button" className="btn btn-ghost" onClick={cycleTheme} title="Тема">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { api, ApiError, type LinkStats, type Profile } from '../api'
+import { api, ApiError, type LinkStats } from '../api'
 import { Avatar, BarChart, Modal } from '../components'
 
 export function StatsPage() {
@@ -12,7 +12,6 @@ export function StatsPage() {
   const [error, setError] = useState<string | null>(null)
   const [daysOpen, setDaysOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
-  const [profiles, setProfiles] = useState<Profile[]>([])
 
   const load = useCallback(async () => {
     setError(null)
@@ -33,10 +32,6 @@ export function StatsPage() {
   useEffect(() => {
     void load()
   }, [load])
-
-  useEffect(() => {
-    void api<{ profiles: Profile[] }>('/admin/api/profiles').then((r) => setProfiles(r.profiles))
-  }, [])
 
   async function clearClicks() {
     if (!confirm('Очистить статистику кликов по этой ссылке?')) return
@@ -161,7 +156,6 @@ export function StatsPage() {
       <EditLinkModal
         open={editOpen}
         link={link}
-        profiles={profiles}
         onClose={() => setEditOpen(false)}
         onSaved={async () => {
           setEditOpen(false)
@@ -175,13 +169,11 @@ export function StatsPage() {
 function EditLinkModal({
   open,
   link,
-  profiles,
   onClose,
   onSaved,
 }: {
   open: boolean
   link: LinkStats['link']
-  profiles: Profile[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -199,7 +191,6 @@ function EditLinkModal({
           destination_url: fd.get('destination_url'),
           title: fd.get('title'),
           label: fd.get('label'),
-          profile_id: fd.get('profile_id') || '',
         },
       })
       onSaved()
@@ -224,17 +215,6 @@ function EditLinkModal({
         <label className="field-label">
           Метка
           <input className="input" name="label" defaultValue={link.label || ''} />
-        </label>
-        <label className="field-label">
-          Профиль
-          <select className="input" name="profile_id" defaultValue={link.profile_id || ''}>
-            <option value="">Без профиля</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
         </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
           Сохранить

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, ApiError, type Dashboard, type LinkRow, type Profile } from '../api'
+import { api, ApiError, type Dashboard, type LinkRow } from '../api'
 import { Avatar, Modal } from '../components'
 
 export function LinksPage() {
   const [sp, setSp] = useSearchParams()
   const nav = useNavigate()
-  const profile = sp.get('profile') || 'all'
   const platform = sp.get('platform') || 'all'
   const account = sp.get('account') || ''
   const preset = sp.get('preset') || 'all'
@@ -29,7 +28,6 @@ export function LinksPage() {
     setError(null)
     try {
       const q = new URLSearchParams()
-      if (profile) q.set('profile', profile)
       if (platform) q.set('platform', platform)
       if (account) q.set('account', account)
       if (preset && preset !== 'custom') q.set('preset', preset === 'all' ? '' : preset)
@@ -38,7 +36,6 @@ export function LinksPage() {
       } else if (preset) q.set('preset', preset)
       if (sort) q.set('sort', sort)
       if (order) q.set('order', order)
-      // clean empty
       ;[...q.keys()].forEach((k) => {
         if (!q.get(k)) q.delete(k)
       })
@@ -50,7 +47,7 @@ export function LinksPage() {
     } finally {
       setLoading(false)
     }
-  }, [profile, platform, account, preset, sort, order])
+  }, [platform, account, preset, sort, order])
 
   useEffect(() => {
     void load()
@@ -58,7 +55,6 @@ export function LinksPage() {
 
   function setFilter(next: Record<string, string>) {
     const merged = {
-      profile,
       platform,
       account,
       preset,
@@ -67,7 +63,6 @@ export function LinksPage() {
       ...next,
     }
     const n = new URLSearchParams()
-    if (merged.profile && merged.profile !== 'all') n.set('profile', merged.profile)
     if (merged.platform && merged.platform !== 'all') n.set('platform', merged.platform)
     if (merged.account) n.set('account', merged.account)
     if (merged.preset && merged.preset !== 'all') n.set('preset', merged.preset)
@@ -121,42 +116,7 @@ export function LinksPage() {
       {loading && !data ? <div className="loading">Загрузка…</div> : null}
 
       {data ? (
-        <div className="links-layout">
-          <aside className="sidebar stack">
-            <input
-              className="input"
-              type="search"
-              placeholder="Поиск профилей"
-              onChange={(e) => {
-                const q = e.target.value.toLowerCase()
-                document.querySelectorAll<HTMLElement>('[data-profile-label]').forEach((el) => {
-                  const label = el.getAttribute('data-profile-label') || ''
-                  el.style.display = !q || label.includes(q) ? '' : 'none'
-                })
-              }}
-            />
-            {data.profile_filters.map((pf) => (
-              <button
-                key={pf.id}
-                type="button"
-                className={`sidebar-item${profile === pf.id ? ' active' : ''}`}
-                data-profile-label={(pf.name || '').toLowerCase()}
-                onClick={() => setFilter({ profile: pf.id })}
-              >
-                <span
-                  className="ring"
-                  style={{ background: pf.color || 'var(--muted)' }}
-                  aria-hidden
-                >
-                  {pf.id === 'all' || pf.id === 'none' ? '' : pf.name.slice(0, 1)}
-                </span>
-                <span>{pf.name}</span>
-                <span className="sidebar-item__count">{pf.count}</span>
-              </button>
-            ))}
-          </aside>
-
-          <div className="stack">
+        <div className="stack" style={{ marginTop: '1rem' }}>
             <div className="pills">
               {data.platform_filters.map((pl) => (
                 <button
@@ -226,7 +186,6 @@ export function LinksPage() {
                 <thead>
                   <tr>
                     <th>Название</th>
-                    <th>Профиль</th>
                     <th>Платф.</th>
                     <th>Аккаунт</th>
                     <th className="num">
@@ -246,16 +205,6 @@ export function LinksPage() {
                   {data.links.map((row) => (
                     <tr key={row.id} onClick={() => nav(`/admin/links/${row.id}/stats`)}>
                       <td>{row.title?.trim() || '—'}</td>
-                      <td>
-                        {row.profile ? (
-                          <span className="row" style={{ gap: '0.35rem' }}>
-                            <span className="pill__dot" style={{ background: row.profile.color }} />
-                            {row.profile.name}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
                       <td>
                         {row.platform ? (
                           <span className="row" style={{ gap: '0.35rem' }}>
@@ -288,7 +237,7 @@ export function LinksPage() {
                   ))}
                   {!data.links.length ? (
                     <tr style={{ cursor: 'default' }}>
-                      <td colSpan={7} className="muted">
+                      <td colSpan={6} className="muted">
                         Нет ссылок по фильтру
                       </td>
                     </tr>
@@ -296,14 +245,11 @@ export function LinksPage() {
                 </tbody>
               </table>
             </div>
-          </div>
         </div>
       ) : null}
 
       <NewLinkModal
         open={newOpen}
-        profiles={data?.profiles || []}
-        defaultProfile={profile !== 'all' && profile !== 'none' ? profile : ''}
         onClose={() => {
           setNewOpen(false)
           if (sp.get('new')) {
@@ -315,8 +261,6 @@ export function LinksPage() {
       />
       <BulkModal
         open={bulkOpen}
-        profiles={data?.profiles || []}
-        defaultProfile={profile !== 'all' && profile !== 'none' ? profile : ''}
         onClose={() => setBulkOpen(false)}
         onDone={() => {
           setBulkOpen(false)
@@ -325,7 +269,6 @@ export function LinksPage() {
       />
       <ImportModal
         open={importOpen}
-        profiles={data?.profiles || []}
         onClose={() => setImportOpen(false)}
         onDone={() => {
           setImportOpen(false)
@@ -350,7 +293,6 @@ export function LinksPage() {
       <EditLinkModal
         open={!!editLink}
         link={editLink}
-        profiles={data?.profiles || []}
         onClose={() => setEditLink(null)}
         onSaved={() => {
           setEditLink(null)
@@ -419,13 +361,11 @@ function LinkActionsModal({
 function EditLinkModal({
   open,
   link,
-  profiles,
   onClose,
   onSaved,
 }: {
   open: boolean
   link: LinkRow | null
-  profiles: Profile[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -445,7 +385,6 @@ function EditLinkModal({
           destination_url: fd.get('destination_url'),
           title: fd.get('title'),
           label: fd.get('label'),
-          profile_id: fd.get('profile_id') || '',
         },
       })
       onSaved()
@@ -474,17 +413,6 @@ function EditLinkModal({
           Аккаунт / метка
           <input className="input" name="label" defaultValue={link.label || ''} />
         </label>
-        <label className="field-label">
-          Профиль
-          <select className="input" name="profile_id" defaultValue={link.profile_id || ''}>
-            <option value="">Без профиля</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <button className="btn btn-primary" disabled={busy} type="submit">
           Сохранить
         </button>
@@ -495,14 +423,10 @@ function EditLinkModal({
 
 function NewLinkModal({
   open,
-  profiles,
-  defaultProfile,
   onClose,
   onCreated,
 }: {
   open: boolean
-  profiles: Profile[]
-  defaultProfile: string
   onClose: () => void
   onCreated: (id: string) => void
 }) {
@@ -520,7 +444,6 @@ function NewLinkModal({
           destination_url: fd.get('destination_url'),
           title: fd.get('title') || null,
           label: fd.get('label') || null,
-          profile_id: fd.get('profile_id') || '',
         },
       })
       onCreated(res.link.id)
@@ -546,17 +469,6 @@ function NewLinkModal({
           Аккаунт / метка
           <input className="input" name="label" />
         </label>
-        <label className="field-label">
-          Профиль
-          <select className="input" name="profile_id" defaultValue={defaultProfile}>
-            <option value="">Без профиля</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Создать
         </button>
@@ -567,14 +479,10 @@ function NewLinkModal({
 
 function BulkModal({
   open,
-  profiles,
-  defaultProfile,
   onClose,
   onDone,
 }: {
   open: boolean
-  profiles: Profile[]
-  defaultProfile: string
   onClose: () => void
   onDone: () => void
 }) {
@@ -591,7 +499,6 @@ function BulkModal({
         json: {
           destination_url: fd.get('destination_url'),
           labels: fd.get('labels'),
-          profile_id: fd.get('profile_id') || '',
         },
       })
       onDone()
@@ -613,17 +520,6 @@ function BulkModal({
           Аккаунты (по одному на строку)
           <textarea className="input textarea" name="labels" required />
         </label>
-        <label className="field-label">
-          Профиль
-          <select className="input" name="profile_id" defaultValue={defaultProfile}>
-            <option value="">Без профиля</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Создать
         </button>
@@ -634,12 +530,10 @@ function BulkModal({
 
 function ImportModal({
   open,
-  profiles,
   onClose,
   onDone,
 }: {
   open: boolean
-  profiles: Profile[]
   onClose: () => void
   onDone: () => void
 }) {
@@ -666,17 +560,6 @@ function ImportModal({
         <label className="field-label">
           CSV файл
           <input className="input" name="file" type="file" accept=".csv,text/csv" required />
-        </label>
-        <label className="field-label">
-          Профиль по умолчанию
-          <select className="input" name="profile_id" defaultValue="">
-            <option value="">Без профиля</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
         </label>
         <button className="btn btn-primary" type="submit" disabled={busy}>
           Импортировать

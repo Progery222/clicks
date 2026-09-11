@@ -3,7 +3,6 @@ import { AuthProvider } from './auth'
 import { RequireAuth, LoginPage } from './pages/LoginPage'
 import { LinksPage } from './pages/LinksPage'
 import { StatsPage } from './pages/StatsPage'
-import { ProfilesPage } from './pages/ProfilesPage'
 import { IndicatorsPage } from './pages/IndicatorsPage'
 
 export default function App() {
@@ -20,14 +19,7 @@ export default function App() {
               </RequireAuth>
             }
           />
-          <Route
-            path="/admin/profiles"
-            element={
-              <RequireAuth>
-                <ProfilesPage />
-              </RequireAuth>
-            }
-          />
+          <Route path="/admin/profiles" element={<Navigate to="/admin" replace />} />
           <Route
             path="/admin/links/:linkId/stats"
             element={

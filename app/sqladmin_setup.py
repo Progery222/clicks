@@ -9,7 +9,7 @@ from starlette.responses import RedirectResponse
 
 from app.config import get_settings
 from app.database import engine
-from app.models import Click, IpAuthLockout, Link, Profile
+from app.models import Click, IpAuthLockout, Link
 from app.security import verify_env_password
 
 _SESSION_KEY = "sqladmin_auth"
@@ -40,16 +40,6 @@ class SqlAdminAuth(AuthenticationBackend):
         return False
 
 
-class ProfileAdmin(ModelView, model=Profile):
-    name = "Профиль"
-    name_plural = "Профили"
-    icon = "fa-solid fa-user-group"
-    column_list = [Profile.id, Profile.name, Profile.color, Profile.created_at, Profile.updated_at]
-    column_searchable_list = [Profile.name]
-    column_sortable_list = [Profile.name, Profile.created_at]
-    form_excluded_columns = [Profile.links]
-
-
 class LinkAdmin(ModelView, model=Link):
     name = "Ссылка"
     name_plural = "Ссылки"
@@ -61,12 +51,11 @@ class LinkAdmin(ModelView, model=Link):
         Link.label,
         Link.platform,
         Link.destination_url,
-        Link.profile_id,
         Link.created_at,
     ]
     column_searchable_list = [Link.slug, Link.title, Link.label, Link.destination_url]
     column_sortable_list = [Link.slug, Link.created_at, Link.platform]
-    form_excluded_columns = [Link.clicks]
+    form_excluded_columns = [Link.clicks, Link.profile, Link.profile_id]
 
 
 class ClickAdmin(ModelView, model=Click):
@@ -111,7 +100,6 @@ def setup_sqladmin(app) -> Admin:
         title="Bio links DB",
         authentication_backend=authentication_backend,
     )
-    admin.add_view(ProfileAdmin)
     admin.add_view(LinkAdmin)
     admin.add_view(ClickAdmin)
     admin.add_view(IpAuthLockoutAdmin)
