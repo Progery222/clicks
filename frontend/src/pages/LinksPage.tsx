@@ -388,7 +388,7 @@ export function LinksPage() {
                 className="input"
                 name="account"
                 type="search"
-                placeholder="Поиск по аккаунту"
+                placeholder="Поиск по аккаунту или слагу"
                 defaultValue={account}
               />
               <button className="btn" type="submit">
@@ -413,6 +413,7 @@ export function LinksPage() {
                       />
                     </th>
                     <th>Название</th>
+                    <th>Slug</th>
                     <th>
                       <span className="row" style={{ gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
                         С какого аккаунта(ов)
@@ -479,6 +480,24 @@ export function LinksPage() {
                       </td>
                       <td>{row.title?.trim() || '—'}</td>
                       <td>
+                        <button
+                          type="button"
+                          className="btn btn-ghost slug slug-copy"
+                          title={`Скопировать /r/${row.slug}`}
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            const url = `${window.location.origin}/r/${row.slug}`
+                            try {
+                              await navigator.clipboard.writeText(url)
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        >
+                          {row.slug}
+                        </button>
+                      </td>
+                      <td>
                         <AccountCell
                           display={row.account_display}
                           platformIconUrl={row.platform_icon_url}
@@ -539,7 +558,7 @@ export function LinksPage() {
                   ))}
                   {!data.links.length ? (
                     <tr style={{ cursor: 'default' }}>
-                      <td colSpan={7} className="muted">
+                      <td colSpan={8} className="muted">
                         Нет ссылок по фильтру
                       </td>
                     </tr>

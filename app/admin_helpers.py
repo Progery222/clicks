@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from urllib.parse import urlencode, urlparse
 
 from sqlalchemy import Select, func, or_, select
@@ -10,6 +11,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Click, Link
 from app.platforms import detect_platform_from_text, platform_favicon_url
 from app.stats_range import dashboard_stats_range, parse_range
+
+_SHORT_LINK_SLUG_RE = re.compile(
+    r"(?:^|/)r/([A-Za-z0-9_-]+)(?:/?$|[/?#])",
+    re.IGNORECASE,
+)
+
+
+def extract_short_link_slug(raw: str | None) -> str | None:
+    """Достать slug из короткой ссылки: ``https://bytl.org/r/abc``, ``/r/abc``, ``bytl.org/r/abc``."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    if s.startswith("/"):
+        m = re.fullmatch(r"/r/([A-Za-z0-9_-]+)/?", s, flags=re.IGNORECASE)
+        if m:
+            return m.group(1)
+        m = _SHORT_LINK_SLUG_RE.search(s)
+        return m.group(1) if m else None
+    to_parse = s if "://" in s else f"https://{s}"
+    try:
+        path = urlparse(to_parse).path or ""
+        m = re.fullmatch(r"/r/([A-Za-z0-9_-]+)/?", path, flags=re.IGNORECASE)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    m = _SHORT_LINK_SLUG_RE.search(s)
+    return m.group(1) if m else None
 
 
 def normalize_table_sort(sort: str | None) -> str | None:
@@ -28,6 +57,9 @@ def normalize_account_search(raw: str | None) -> str | None:
     s = (raw or "").strip()
     if not s:
         return None
+    slug = extract_short_link_slug(s)
+    if slug:
+        return slug[:255]
     return s[:255]
 
 
@@ -103,6 +135,7 @@ def account_label_ilike(term: str):
     return or_(
         Link.label.ilike(pattern, escape="\\"),
         Link.title.ilike(pattern, escape="\\"),
+        Link.slug.ilike(pattern, escape="\\"),
     )
 
 

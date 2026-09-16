@@ -556,6 +556,14 @@ textarea {
   font-weight: 500;
 }
 
+.slug-copy {
+  padding: 0.1rem 0.35rem;
+  min-height: 0;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
 .avatar {
   width: 28px;
   height: 28px;
