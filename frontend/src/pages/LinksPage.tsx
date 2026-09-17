@@ -982,11 +982,11 @@ function BulkActionsModal({
                 defaultValue={defaultDestinationTitle}
               />
             </label>
-            {selectedLinks.length > 1 && (!defaultDestinationUrl || !defaultDestinationTitle) ? (
+            {urlsDiffer || titlesDiffer ? (
               <p className="muted small">
-                {!defaultDestinationUrl
-                  ? 'У выбранных ссылок разные URL — поле оставлено пустым.'
-                  : 'У выбранных ссылок разные названия цели — поле оставлено пустым.'}
+                {urlsDiffer
+                  ? 'У выбранных ссылок разные URL — поле URL оставлено пустым.'
+                  : 'У выбранных ссылок разные названия цели — поле названия оставлено пустым.'}
               </p>
             ) : null}
             <div className="row" style={{ gap: '0.5rem' }}>
