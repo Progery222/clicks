@@ -136,6 +136,8 @@ def account_label_ilike(term: str):
         Link.label.ilike(pattern, escape="\\"),
         Link.title.ilike(pattern, escape="\\"),
         Link.slug.ilike(pattern, escape="\\"),
+        Link.destination_title.ilike(pattern, escape="\\"),
+        Link.destination_url.ilike(pattern, escape="\\"),
     )
 
 
@@ -299,7 +301,11 @@ async def destination_link_filters(db: AsyncSession) -> list[dict]:
     """Группы целей для сайдбара: Все + уникальные destination_url со счётчиками."""
     rows = (
         await db.execute(
-            select(Link.destination_url, func.count())
+            select(
+                Link.destination_url,
+                func.count(),
+                func.max(Link.destination_title),
+            )
             .group_by(Link.destination_url)
             .order_by(func.count().desc(), Link.destination_url.asc())
         )
@@ -324,17 +330,19 @@ async def destination_link_filters(db: AsyncSession) -> list[dict]:
 
     items: list[dict] = []
     total = 0
-    for url, cnt in rows:
+    for url, cnt, dest_title in rows:
         n = int(cnt)
         total += n
         raw = str(url)
+        custom = (dest_title or "").strip()
         icon_url, platform_icon_url, icon_fallbacks = destination_icons(
             raw, platform_id=majority_platform.get(raw)
         )
         items.append(
             {
                 "id": raw,
-                "name": destination_display_label(raw),
+                "name": custom or destination_display_label(raw),
+                "destination_title": custom or None,
                 "count": n,
                 "icon_url": icon_url,
                 "platform_icon_url": platform_icon_url,
@@ -345,6 +353,7 @@ async def destination_link_filters(db: AsyncSession) -> list[dict]:
         {
             "id": "all",
             "name": "Все цели",
+            "destination_title": None,
             "count": total,
             "icon_url": None,
             "platform_icon_url": None,

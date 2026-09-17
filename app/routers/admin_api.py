@@ -42,6 +42,7 @@ from app.services.ip_lockout import (
 )
 from app.services.label_match import account_label_display
 from app.services.links_meta import (
+    apply_destination_title,
     apply_link_accounts,
     apply_link_label,
     apply_link_title,
@@ -119,11 +120,14 @@ async def destination_favicon(
 def _serialize_link(link: Link) -> dict[str, Any]:
     account_display = account_label_display(link.label) or link.label or link.slug
     display_name = (link.title or "").strip() or account_display
+    dest_title = (link.destination_title or "").strip() or None
     dest_icon, dest_plat_icon, dest_fallbacks = destination_icons(link.destination_url)
     return {
         "id": str(link.id),
         "slug": link.slug,
         "destination_url": link.destination_url,
+        "destination_title": dest_title,
+        "destination_display": dest_title or link.destination_url,
         "title": link.title,
         "label": link.label,
         "platform": link.platform,
@@ -141,6 +145,33 @@ def _serialize_link(link: Link) -> dict[str, Any]:
     }
 
 
+async def _existing_destination_title(db: AsyncSession, destination_url: str) -> str | None:
+    raw = await db.scalar(
+        select(Link.destination_title)
+        .where(
+            Link.destination_url == destination_url,
+            Link.destination_title.isnot(None),
+            Link.destination_title != "",
+        )
+        .limit(1)
+    )
+    title = (raw or "").strip()
+    return title or None
+
+
+async def _sync_destination_title(
+    db: AsyncSession,
+    destination_url: str,
+    destination_title: str | None,
+) -> None:
+    cleaned = (destination_title or "").strip() or None
+    await db.execute(
+        update(Link)
+        .where(Link.destination_url == destination_url)
+        .values(destination_title=cleaned)
+    )
+
+
 def _serialize_link_row(row: dict) -> dict[str, Any]:
     link: Link = row["link"]
     base = _serialize_link(link)
@@ -156,25 +187,27 @@ def _serialize_link_row(row: dict) -> dict[str, Any]:
     }
 
 
-
 class LoginBody(BaseModel):
     password: str
 
 
 class LinkCreateBody(BaseModel):
     destination_url: str
+    destination_title: str | None = None
     title: str | None = None
     label: str | None = None
 
 
 class LinkUpdateBody(BaseModel):
     destination_url: str | None = None
+    destination_title: str | None = None
     title: str | None = None
     label: str | None = None
 
 
 class BulkDestBody(BaseModel):
     destination_url: str
+    destination_title: str | None = None
     link_ids: list[str] = Field(default_factory=list)
 
 
@@ -335,14 +368,21 @@ async def create_link(
     if not groups:
         groups = [(None, [])]
 
+    dest_title = (body.destination_title or "").strip() or None
+    if dest_title is None:
+        dest_title = await _existing_destination_title(db, dest_url)
+
     created: list[Link] = []
     for _, accounts in groups:
         slug = await _unique_slug(db)
         link = Link(slug=slug, destination_url=dest_url)
         apply_link_title(link, body.title)
+        apply_destination_title(link, dest_title)
         apply_link_accounts(link, accounts)
         db.add(link)
         created.append(link)
+    if dest_title is not None:
+        await _sync_destination_title(db, dest_url, dest_title)
     for link in created:
         await bootstrap_link_avatar(db, link)
     await db.commit()
@@ -375,9 +415,17 @@ async def bulk_destination(
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Некорректный id") from e
     unique_ids = list(dict.fromkeys(ids))
+    dest_url = body.destination_url.strip()
+    dest_title = (body.destination_title or "").strip() or None
+    if dest_title is None:
+        dest_title = await _existing_destination_title(db, dest_url)
     result = await db.execute(
-        update(Link).where(Link.id.in_(unique_ids)).values(destination_url=body.destination_url.strip())
+        update(Link)
+        .where(Link.id.in_(unique_ids))
+        .values(destination_url=dest_url, destination_title=dest_title)
     )
+    if dest_title is not None:
+        await _sync_destination_title(db, dest_url, dest_title)
     await db.commit()
     invalidate_dashboard_counts_cache()
     return JSONResponse({"updated": int(result.rowcount or 0)})
@@ -466,6 +514,12 @@ async def update_link(
         link.destination_url = body.destination_url.strip()
     if body.title is not None:
         apply_link_title(link, body.title)
+    if body.destination_title is not None:
+        apply_destination_title(link, body.destination_title)
+    elif body.destination_url is not None:
+        inherited = await _existing_destination_title(db, link.destination_url)
+        if inherited is not None:
+            apply_destination_title(link, inherited)
     extra_links: list[Link] = []
     if body.label is not None:
         groups = group_accounts_by_platform(body.label)
@@ -475,15 +529,21 @@ async def update_link(
             apply_link_accounts(link, groups[0][1])
             dest_url = link.destination_url
             title = link.title
+            dest_title = link.destination_title
             for _, accounts in groups[1:]:
                 slug = await _unique_slug(db)
                 extra = Link(slug=slug, destination_url=dest_url)
                 apply_link_title(extra, title)
+                apply_destination_title(extra, dest_title)
                 apply_link_accounts(extra, accounts)
                 db.add(extra)
                 extra_links.append(extra)
             for extra in extra_links:
                 await bootstrap_link_avatar(db, extra)
+    if body.destination_title is not None or (
+        body.destination_url is not None and link.destination_title
+    ):
+        await _sync_destination_title(db, link.destination_url, link.destination_title)
     await db.commit()
     invalidate_link_avatar_cache(link.id)
     invalidate_dashboard_counts_cache()

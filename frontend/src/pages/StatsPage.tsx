@@ -64,7 +64,13 @@ export function StatsPage() {
               </a>
             </p>
             <p className="muted small" style={{ wordBreak: 'break-all' }}>
-              Цель:{' '}
+              {link.destination_title ? (
+                <>
+                  Цель: <strong>{link.destination_title}</strong>
+                  <br />
+                </>
+              ) : null}
+              URL цели:{' '}
               <a href={link.destination_url} target="_blank" rel="noreferrer">
                 {link.destination_url}
               </a>
@@ -177,6 +183,7 @@ function EditLinkModal({
         method: 'PATCH',
         json: {
           destination_url: fd.get('destination_url'),
+          destination_title: fd.get('destination_title'),
           title: fd.get('title'),
           label: fd.get('label'),
         },
@@ -193,8 +200,17 @@ function EditLinkModal({
       <form className="stack" onSubmit={onSubmit}>
         {error ? <div className="error-box">{error}</div> : null}
         <label className="field-label">
-          Цель
+          URL цели
           <input className="input" name="destination_url" defaultValue={link.destination_url} required />
+        </label>
+        <label className="field-label">
+          Название цели
+          <input
+            className="input"
+            name="destination_title"
+            defaultValue={link.destination_title || ''}
+            placeholder="Как показывать цель в таблице и сайдбаре"
+          />
         </label>
         <label className="field-label">
           Название

@@ -11,6 +11,10 @@ def apply_link_title(link: Link, title: str | None) -> None:
     link.title = (title or "").strip() or None
 
 
+def apply_destination_title(link: Link, destination_title: str | None) -> None:
+    link.destination_title = (destination_title or "").strip() or None
+
+
 def group_accounts_by_platform(label: str | None) -> list[tuple[str | None, list[str]]]:
     """Разбить аккаунты на группы по детектированной платформе (порядок первого появления)."""
     accounts = parse_label_lines(label or "")

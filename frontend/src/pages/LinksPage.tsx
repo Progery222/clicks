@@ -438,7 +438,7 @@ export function LinksPage() {
                         ) : null}
                       </span>
                     </th>
-                    <th>Цель</th>
+                    <th>URL цели</th>
                     <th className="num">
                       <button type="button" className="btn btn-ghost" onClick={() => toggleSort('total')}>
                         Всего
@@ -526,7 +526,7 @@ export function LinksPage() {
                             url={row.destination_icon_url}
                             fallbackUrl={row.destination_icon_fallback_url}
                             fallbackUrls={row.destination_icon_fallbacks}
-                            name={row.destination_url}
+                            name={row.destination_display || row.destination_url}
                           />
                           <a
                             href={row.destination_url}
@@ -535,7 +535,7 @@ export function LinksPage() {
                             style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {row.destination_url}
+                            {row.destination_display || row.destination_title || row.destination_url}
                           </a>
                         </span>
                       </td>
@@ -709,6 +709,7 @@ function EditLinkModal({
         method: 'PATCH',
         json: {
           destination_url: fd.get('destination_url'),
+          destination_title: fd.get('destination_title'),
           title: fd.get('title'),
           label: fd.get('label'),
         },
@@ -728,8 +729,17 @@ function EditLinkModal({
       <form className="stack" onSubmit={onSubmit} key={link.id}>
         {error ? <div className="error-box">{error}</div> : null}
         <label className="field-label">
-          Цель
+          URL цели
           <input className="input" name="destination_url" defaultValue={link.destination_url} required />
+        </label>
+        <label className="field-label">
+          Название цели
+          <input
+            className="input"
+            name="destination_title"
+            defaultValue={link.destination_title || ''}
+            placeholder="Как показывать цель в таблице и сайдбаре"
+          />
         </label>
         <label className="field-label">
           Название
@@ -778,6 +788,7 @@ function NewLinkModal({
         method: 'POST',
         json: {
           destination_url: fd.get('destination_url'),
+          destination_title: fd.get('destination_title') || null,
           title: fd.get('title') || null,
           label: fd.get('label') || null,
         },
@@ -795,8 +806,16 @@ function NewLinkModal({
       <form className="stack" onSubmit={onSubmit}>
         {error ? <div className="error-box">{error}</div> : null}
         <label className="field-label">
-          Цель (URL)
+          URL цели
           <input className="input" name="destination_url" type="url" required placeholder="https://" />
+        </label>
+        <label className="field-label">
+          Название цели
+          <input
+            className="input"
+            name="destination_title"
+            placeholder="Как показывать цель в таблице и сайдбаре"
+          />
         </label>
         <label className="field-label">
           Название
@@ -855,7 +874,11 @@ function BulkActionsModal({
     try {
       await api('/admin/api/links/bulk-destination', {
         method: 'POST',
-        json: { destination_url: fd.get('destination_url'), link_ids: linkIds },
+        json: {
+          destination_url: fd.get('destination_url'),
+          destination_title: fd.get('destination_title') || null,
+          link_ids: linkIds,
+        },
       })
       onDone()
     } catch (err) {
@@ -911,6 +934,14 @@ function BulkActionsModal({
             <label className="field-label">
               Новый URL цели
               <input className="input" name="destination_url" type="url" required placeholder="https://" />
+            </label>
+            <label className="field-label">
+              Название цели
+              <input
+                className="input"
+                name="destination_title"
+                placeholder="Необязательно — как показывать в сайдбаре"
+              />
             </label>
             <div className="row" style={{ gap: '0.5rem' }}>
               <button type="button" className="btn" onClick={() => setMode('menu')} disabled={busy}>

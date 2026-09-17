@@ -67,6 +67,8 @@ export type LinkRow = {
   id: string
   slug: string
   destination_url: string
+  destination_title?: string | null
+  destination_display?: string
   title: string | null
   label: string | null
   platform: string | null
@@ -94,6 +96,7 @@ export type Dashboard = {
   destination_filters: {
     id: string
     name: string
+    destination_title?: string | null
     count: number
     icon_url?: string | null
     platform_icon_url?: string | null

@@ -50,10 +50,17 @@ class LinkAdmin(ModelView, model=Link):
         Link.title,
         Link.label,
         Link.platform,
+        Link.destination_title,
         Link.destination_url,
         Link.created_at,
     ]
-    column_searchable_list = [Link.slug, Link.title, Link.label, Link.destination_url]
+    column_searchable_list = [
+        Link.slug,
+        Link.title,
+        Link.label,
+        Link.destination_title,
+        Link.destination_url,
+    ]
     column_sortable_list = [Link.slug, Link.created_at, Link.platform]
     form_excluded_columns = [Link.clicks]
 

@@ -18,6 +18,7 @@ class Link(Base):
     )
     slug: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
     destination_url: Mapped[str] = mapped_column(Text, nullable=False)
+    destination_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     label: Mapped[str | None] = mapped_column(Text, nullable=True)
     account_avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
