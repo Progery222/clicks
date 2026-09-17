@@ -595,6 +595,7 @@ export function LinksPage() {
       <BulkActionsModal
         open={destOpen}
         linkIds={selectedIds}
+        links={data?.links || []}
         onClose={() => setDestOpen(false)}
         onDone={() => {
           setDestOpen(false)
@@ -845,17 +846,43 @@ function NewLinkModal({
 function BulkActionsModal({
   open,
   linkIds,
+  links,
   onClose,
   onDone,
 }: {
   open: boolean
   linkIds: string[]
+  links: LinkRow[]
   onClose: () => void
   onDone: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState<'menu' | 'destination' | 'delete'>('menu')
+
+  const selectedLinks = useMemo(
+    () => links.filter((l) => linkIds.includes(l.id)),
+    [links, linkIds],
+  )
+
+  const defaultDestinationUrl = useMemo(() => {
+    const urls = [...new Set(selectedLinks.map((l) => l.destination_url).filter(Boolean))]
+    return urls.length === 1 ? urls[0] : ''
+  }, [selectedLinks])
+
+  const defaultDestinationTitle = useMemo(() => {
+    const titles = [
+      ...new Set(selectedLinks.map((l) => (l.destination_title || '').trim())),
+    ]
+    return titles.length === 1 ? titles[0] : ''
+  }, [selectedLinks])
+
+  const urlsDiffer =
+    selectedLinks.length > 1 &&
+    new Set(selectedLinks.map((l) => l.destination_url).filter(Boolean)).size > 1
+  const titlesDiffer =
+    selectedLinks.length > 1 &&
+    new Set(selectedLinks.map((l) => (l.destination_title || '').trim())).size > 1
 
   useEffect(() => {
     if (open) {
@@ -930,10 +957,21 @@ function BulkActionsModal({
         ) : null}
 
         {mode === 'destination' ? (
-          <form className="stack" onSubmit={onChangeDestination}>
+          <form
+            key={`dest-${defaultDestinationUrl}|${defaultDestinationTitle}`}
+            className="stack"
+            onSubmit={onChangeDestination}
+          >
             <label className="field-label">
               Новый URL цели
-              <input className="input" name="destination_url" type="url" required placeholder="https://" />
+              <input
+                className="input"
+                name="destination_url"
+                type="url"
+                required
+                placeholder="https://"
+                defaultValue={defaultDestinationUrl}
+              />
             </label>
             <label className="field-label">
               Название цели
@@ -941,8 +979,16 @@ function BulkActionsModal({
                 className="input"
                 name="destination_title"
                 placeholder="Необязательно — как показывать в сайдбаре"
+                defaultValue={defaultDestinationTitle}
               />
             </label>
+            {selectedLinks.length > 1 && (!defaultDestinationUrl || !defaultDestinationTitle) ? (
+              <p className="muted small">
+                {!defaultDestinationUrl
+                  ? 'У выбранных ссылок разные URL — поле оставлено пустым.'
+                  : 'У выбранных ссылок разные названия цели — поле оставлено пустым.'}
+              </p>
+            ) : null}
             <div className="row" style={{ gap: '0.5rem' }}>
               <button type="button" className="btn" onClick={() => setMode('menu')} disabled={busy}>
                 Назад
